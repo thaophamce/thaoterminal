@@ -10,7 +10,7 @@ set -euo pipefail
 REPO="tawgroup/taw-terminal"
 APP="TawTerminal"
 
-bold() { printf "\033[1m%s\033[0m\n" "$1"; }
+say() { printf "\033[1m%s\033[0m\n" "$*"; }
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "TawTerminal is macOS-only." >&2
@@ -23,7 +23,7 @@ if [ "$ARCH" != "arm64" ]; then
   exit 1
 fi
 
-bold "Finding latest $APP release…"
+say "Finding latest $APP release..."
 TAG="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
   | grep -m1 '"tag_name"' | cut -d'"' -f4)"
 if [ -z "${TAG:-}" ]; then
@@ -31,23 +31,23 @@ if [ -z "${TAG:-}" ]; then
   exit 1
 fi
 VER="${TAG#v}"
-ZIP="$APP-$VER-arm64-mac.zip"
+ZIP="${APP}-${VER}-arm64-mac.zip"
 URL="https://github.com/$REPO/releases/download/$TAG/$ZIP"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-bold "Downloading $APP $VER…"
+say "Downloading $APP $VER ..."
 curl -fSL --progress-bar "$URL" -o "$TMP/$ZIP"
 
-bold "Unpacking…"
+say "Unpacking ..."
 unzip -q "$TMP/$ZIP" -d "$TMP"
 
-bold "Installing to /Applications…"
-rm -rf "/Applications/$APP.app"
-cp -R "$TMP/$APP.app" "/Applications/"
+say "Installing to /Applications ..."
+rm -rf "/Applications/${APP}.app"
+cp -R "$TMP/${APP}.app" "/Applications/"
 # Local installs aren't quarantined, but strip it just in case (e.g. via browser)
-xattr -dr com.apple.quarantine "/Applications/$APP.app" 2>/dev/null || true
+xattr -dr com.apple.quarantine "/Applications/${APP}.app" 2>/dev/null || true
 
-bold "✓ Installed $APP $VER — launching."
-open "/Applications/$APP.app"
+say "Installed $APP $VER - launching."
+open "/Applications/${APP}.app"
