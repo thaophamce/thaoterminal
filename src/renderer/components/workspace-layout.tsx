@@ -107,20 +107,22 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
             const id = nextTermId()
             const cwd = t.cwd || w.path
             if (t.kind === 'claude' && t.claudeSessionId) {
-              // Resume the conversation; if it was never flushed to disk, fall
-              // back to a fresh session reusing the same id (no error dead-end).
+              // Resume the saved conversation by id. No `|| --session-id`
+              // fallback: that reused the id and errored "already in use" once
+              // the transcript persisted, and also re-fired when the user simply
+              // quit the resumed session.
               const sid = t.claudeSessionId
               return {
                 id, name: t.name, cwd, kind: 'claude' as const,
                 sessionId: sid,
-                initialCommand: `claude --resume ${sid} --dangerously-skip-permissions || claude --session-id ${sid} --dangerously-skip-permissions`
+                initialCommand: `claude --resume ${sid} --dangerously-skip-permissions`
               }
             }
             if (t.kind === 'codex') {
-              // Codex has no fixed id; resume most recent, else start fresh
+              // Codex has no fixed id; resume the most recent session
               return {
                 id, name: t.name, cwd, kind: 'codex' as const,
-                initialCommand: `codex resume --last || codex --dangerously-bypass-approvals-and-sandbox`
+                initialCommand: `codex resume --last`
               }
             }
             return { id, name: t.name, cwd, kind: 'shell' as const }
