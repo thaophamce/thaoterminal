@@ -138,6 +138,7 @@ export function WorkspaceSidebar({
                       <div
                         key={t.id}
                         className={`term-card ${isActive ? 'active' : ''}`}
+                        title={hotkeyIndex[t.id] ? `${t.name}  ·  jump ⌘${hotkeyIndex[t.id]}  ·  double-click to rename` : `${t.name}  ·  double-click to rename`}
                         onClick={() => onSelectTerminal(t.id)}
                       >
                         <span className={`status-dot ${isBusy ? 'busy' : 'idle'}`} />
@@ -170,7 +171,7 @@ export function WorkspaceSidebar({
                         {hotkeyIndex[t.id] && <span className="term-num" title={`Jump: ⌘${hotkeyIndex[t.id]}`}>⌘{hotkeyIndex[t.id]}</span>}
                         <button
                           className="term-close"
-                          title="Close terminal"
+                          title="Close terminal (⌘W when active)"
                           onClick={(e) => { e.stopPropagation(); onCloseTerminal(t.id) }}
                         >×</button>
                       </div>

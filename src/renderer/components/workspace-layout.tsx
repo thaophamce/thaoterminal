@@ -394,13 +394,14 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
             <div
               key={t.id}
               className={`ws-tab ${t.id === activeId ? 'active' : ''}`}
+              title={hotkeyIndex[t.id] ? `${t.name}  ·  jump with ⌘${hotkeyIndex[t.id]}` : t.name}
               onClick={() => setActiveId(t.id)}
             >
               <span className={`ws-tab-ic ${t.kind}`}>
                 {t.kind === 'claude' ? <ClaudeIcon size={13} /> : t.kind === 'codex' ? <CodexIcon size={13} /> : <TerminalIcon size={13} />}
               </span>
               <span>{t.name}</span>
-              <button className="ws-tab-x" onClick={(e) => { e.stopPropagation(); removeTerminal(t.id) }}>×</button>
+              <button className="ws-tab-x" title="Close terminal (⌘W)" onClick={(e) => { e.stopPropagation(); removeTerminal(t.id) }}>×</button>
             </div>
           ))}
           {activeWorkspace && (
@@ -432,8 +433,8 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
             {activeWorkspace.branch && <span className="tb-branch">⎇ {activeWorkspace.branch}</span>}
             <div className="tb-right">
               <span className="tb-shell">● {shellName}</span>
-              <button className="tb-ic" title="New terminal" onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}>+</button>
-              <button className="tb-ic" title="Close terminal" onClick={() => removeTerminal(activeTerm.id)}>🗑</button>
+              <button className="tb-ic" title="New terminal in this folder (⌘T / ⌘N)" onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}>+</button>
+              <button className="tb-ic" title="Close this terminal (⌘W)" onClick={() => removeTerminal(activeTerm.id)}>🗑</button>
             </div>
           </div>
         )}
