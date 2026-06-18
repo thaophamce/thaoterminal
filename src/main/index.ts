@@ -315,17 +315,19 @@ ipcMain.handle('usage:get', () => {
 
 // --- App Lifecycle ---
 
+let isQuitting = false
+
 app.whenReady().then(() => {
   createWindow()
-
-  // Kill all PTYs before window closes to prevent "Object has been destroyed" errors
-  mainWindow?.on('close', () => {
-    ptyManager.killAll()
-  })
 })
 
-app.on('before-quit', () => {
-  ptyManager.killAll()
+// On quit: give Claude/Codex sessions a moment to exit cleanly and flush their
+// transcripts to disk before the processes are killed, so they can be resumed.
+app.on('before-quit', (e) => {
+  if (isQuitting) return
+  e.preventDefault()
+  isQuitting = true
+  ptyManager.gracefulShutdownAll().finally(() => app.quit())
 })
 
 app.on('window-all-closed', () => {

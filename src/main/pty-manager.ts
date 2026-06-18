@@ -129,28 +129,49 @@ export class PtyManager {
   }
 
   /**
-   * Gracefully kill PTY: send 'exit\n' first to let shell cleanup jobs,
-   * then force kill after timeout if still alive.
+   * Gracefully kill PTY. First try to exit any foreground TUI (Claude/Codex:
+   * Ctrl-C twice) so it flushes its session transcript to disk, then exit the
+   * shell, then force kill after a grace window if still alive.
    */
   private gracefulKill(proc: pty.IPty): void {
-    try {
-      // Send exit command so shell can gracefully terminate background jobs
-      proc.write('exit\n')
-    } catch {
-      // PTY already dead, ignore
-    }
-
-    // Force kill after 500ms if shell hasn't exited
+    this.sendQuitSequence(proc)
     const forceKillTimer = setTimeout(() => {
-      try {
-        proc.kill()
-      } catch {
-        // Already dead
-      }
-    }, 500)
-
-    // If shell exits on its own, clear the force kill timer
+      try { proc.kill() } catch { /* already dead */ }
+    }, 2500)
     proc.onExit(() => clearTimeout(forceKillTimer))
+  }
+
+  /**
+   * Ctrl-C twice exits Claude Code / Codex TUIs (letting them persist their
+   * session); for a plain shell it just cancels the current line. Then `exit`
+   * closes the shell. Harmless either way.
+   */
+  private sendQuitSequence(proc: pty.IPty): void {
+    const w = (s: string) => { try { proc.write(s) } catch { /* dead */ } }
+    w('\x03')
+    setTimeout(() => w('\x03'), 150)
+    setTimeout(() => w('exit\n'), 550)
+  }
+
+  /**
+   * Gracefully shut down every PTY (used on app quit): send the quit sequence
+   * to all, wait for them to flush/exit, then force-kill any survivors.
+   * Resolves once done so the caller can quit safely.
+   */
+  async gracefulShutdownAll(timeoutMs = 1500): Promise<void> {
+    const procs = Array.from(this.instances.values()).map((i) => i.process)
+    this.instances.clear()
+    if (procs.length === 0) return
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+    const w = (p: pty.IPty, s: string) => { try { p.write(s) } catch { /* dead */ } }
+
+    procs.forEach((p) => w(p, '\x03'))
+    await delay(150)
+    procs.forEach((p) => w(p, '\x03'))
+    await delay(400)
+    procs.forEach((p) => w(p, 'exit\n'))
+    await delay(timeoutMs)
+    procs.forEach((p) => { try { p.kill() } catch { /* dead */ } })
   }
 
   /**
