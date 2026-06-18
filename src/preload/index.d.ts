@@ -15,10 +15,30 @@ export interface AppAPI {
   openExternal: (url: string) => Promise<void>
 }
 
+export interface PersistedTerm {
+  name: string
+  cwd: string
+  kind?: 'shell' | 'claude'
+  claudeSessionId?: string
+}
+
+export interface PersistedWorkspace {
+  path: string
+  collapsed?: boolean
+  terminals: PersistedTerm[]
+}
+
+export interface PersistedState {
+  version: number
+  active?: { path: string; name: string }
+  workspaces: PersistedWorkspace[]
+}
+
 export interface WorkspaceAPI {
   openFolder: () => Promise<string | null>
-  load: () => Promise<string[] | null>
-  save: (paths: string[]) => Promise<void>
+  // Returns the persisted session (new format), a legacy string[] of paths, or null
+  load: () => Promise<PersistedState | string[] | null>
+  save: (state: PersistedState) => Promise<void>
   gitBranch: (cwd: string) => Promise<string | null>
 }
 

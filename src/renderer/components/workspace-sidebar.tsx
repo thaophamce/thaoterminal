@@ -6,6 +6,10 @@ export interface Term {
   id: string
   name: string
   cwd: string
+  kind: 'shell' | 'claude'
+  sessionId?: string
+  /** Command auto-run on spawn (e.g. `claude --session-id <id>`) */
+  initialCommand?: string
 }
 
 export interface Workspace {
@@ -27,6 +31,7 @@ interface Props {
   onRemoveFolder: (id: string) => void
   onToggle: (id: string) => void
   onAddTerminal: (workspaceId: string) => void
+  onAddClaude: (workspaceId: string) => void
   onSelectTerminal: (id: string) => void
   onCloseTerminal: (id: string) => void
 }
@@ -42,7 +47,7 @@ function splitPath(p: string, home: string): { parent: string; base: string } {
 
 export function WorkspaceSidebar({
   workspaces, activeId, busy, home, query, onQuery,
-  onAddFolder, onRemoveFolder, onToggle, onAddTerminal, onSelectTerminal, onCloseTerminal
+  onAddFolder, onRemoveFolder, onToggle, onAddTerminal, onAddClaude, onSelectTerminal, onCloseTerminal
 }: Props) {
   const q = query.trim().toLowerCase()
   const filtered = q
@@ -87,7 +92,8 @@ export function WorkspaceSidebar({
                 </span>
                 {ws.branch && <span className="folder-branch">⎇ {ws.branch}</span>}
                 {count > 0 && <span className="folder-badge">{count} {count === 1 ? 'terminal' : 'terminals'}</span>}
-                <button className="folder-add" title="Spawn terminal here" onClick={() => onAddTerminal(ws.id)}>+</button>
+                <button className="folder-claude" title="New Claude Code session here" onClick={() => onAddClaude(ws.id)}>✳</button>
+                <button className="folder-add" title="New terminal here" onClick={() => onAddTerminal(ws.id)}>+</button>
                 <button className="folder-rm" title="Remove folder" onClick={() => onRemoveFolder(ws.id)}>🗑</button>
               </div>
 
@@ -103,6 +109,7 @@ export function WorkspaceSidebar({
                         onClick={() => onSelectTerminal(t.id)}
                       >
                         <span className={`status-dot ${isBusy ? 'busy' : 'idle'}`} />
+                        {t.kind === 'claude' && <span className="term-claude-ic" title="Claude Code">✳</span>}
                         <span className="term-name">{t.name}</span>
                         {isActive && <span className="term-state">active</span>}
                         {!isActive && isBusy && <span className="term-running">running</span>}
@@ -115,9 +122,14 @@ export function WorkspaceSidebar({
                     )
                   })}
                   {count === 0 && (
-                    <button className="terms-empty" onClick={() => onAddTerminal(ws.id)}>
-                      ⊕ Spawn terminal here
-                    </button>
+                    <div className="terms-empty-row">
+                      <button className="terms-empty" onClick={() => onAddTerminal(ws.id)}>
+                        ⊕ Terminal
+                      </button>
+                      <button className="terms-empty claude" onClick={() => onAddClaude(ws.id)}>
+                        ✳ Claude Code
+                      </button>
+                    </div>
                   )}
                 </div>
               )}

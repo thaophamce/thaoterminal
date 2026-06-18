@@ -22,7 +22,12 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   const [query, setQuery] = useState('')
   const [shellName, setShellName] = useState('zsh')
   const [home, setHome] = useState('')
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('taw.sidebarWidth'))
+    return saved >= 220 && saved <= 640 ? saved : 340
+  })
   const loadedRef = useRef(false)
+  const resizingRef = useRef(false)
   const busyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // Derived
@@ -38,17 +43,26 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     })
   }, [])
 
-  const spawnTerminal = useCallback((wsId: string, path: string) => {
+  const spawnTerminal = useCallback((wsId: string, path: string, kind: 'shell' | 'claude' = 'shell') => {
     const id = nextTermId()
+    const term = kind === 'claude'
+      ? (() => {
+          // A fresh Claude Code session with a known ID, so it can be resumed later
+          const sessionId = crypto.randomUUID()
+          return {
+            id, cwd: path, kind: 'claude' as const, sessionId,
+            name: `Claude ${termCounter}`,
+            initialCommand: `claude --session-id ${sessionId}`
+          }
+        })()
+      : { id, cwd: path, kind: 'shell' as const, name: `Terminal ${termCounter}` }
     setWorkspaces(prev => prev.map(w =>
-      w.id === wsId
-        ? { ...w, collapsed: false, terminals: [...w.terminals, { id, name: `Terminal ${termCounter}`, cwd: path }] }
-        : w
+      w.id === wsId ? { ...w, collapsed: false, terminals: [...w.terminals, term] } : w
     ))
     setActiveId(id)
   }, [])
 
-  // --- init: load saved folders (or seed with home) ---
+  // --- init: restore saved session (folders + terminals), or seed with home ---
   useEffect(() => {
     (async () => {
       const [homeDir, name, saved] = await Promise.all([
@@ -59,27 +73,70 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
       setHome(homeDir)
       setShellName(name || 'zsh')
 
-      const paths = Array.isArray(saved) && saved.length ? saved : [homeDir]
-      const seedTermId = nextTermId()
-      const ws: Workspace[] = paths.map((p, i) => ({
-        id: p,
-        path: p,
-        collapsed: false,
-        branch: null,
-        terminals: i === 0 ? [{ id: seedTermId, name: 'Terminal 1', cwd: p }] : []
-      }))
+      let ws: Workspace[]
+      let activeTermId: string | null = null
+
+      if (saved && !Array.isArray(saved) && Array.isArray(saved.workspaces) && saved.workspaces.length) {
+        // New format: rebuild folders + terminals. Shells are fresh but rooted
+        // at the same cwd; the previously active terminal is re-selected.
+        ws = saved.workspaces.map(w => ({
+          id: w.path,
+          path: w.path,
+          collapsed: !!w.collapsed,
+          branch: null,
+          terminals: (w.terminals || []).map(t => {
+            const id = nextTermId()
+            const cwd = t.cwd || w.path
+            if (t.kind === 'claude' && t.claudeSessionId) {
+              // Resume the exact Claude Code conversation by its session ID
+              return {
+                id, name: t.name, cwd, kind: 'claude' as const,
+                sessionId: t.claudeSessionId,
+                initialCommand: `claude --resume ${t.claudeSessionId}`
+              }
+            }
+            return { id, name: t.name, cwd, kind: 'shell' as const }
+          })
+        }))
+        const all = ws.flatMap(w => w.terminals.map(t => ({ t, path: w.path })))
+        const match = saved.active && all.find(x => x.path === saved.active!.path && x.t.name === saved.active!.name)
+        activeTermId = (match || all[0])?.t.id ?? null
+      } else {
+        // Legacy (string[] of paths) or first run: seed home with one terminal
+        const paths = Array.isArray(saved) && saved.length ? saved : [homeDir]
+        const seedTermId = nextTermId()
+        ws = paths.map((p, i) => ({
+          id: p,
+          path: p,
+          collapsed: false,
+          branch: null,
+          terminals: i === 0 ? [{ id: seedTermId, name: 'Terminal 1', cwd: p, kind: 'shell' as const }] : []
+        }))
+        activeTermId = seedTermId
+      }
+
       setWorkspaces(ws)
-      setActiveId(seedTermId)
+      setActiveId(activeTermId)
       ws.forEach(w => fetchBranch(w.id, w.path))
       loadedRef.current = true
     })()
   }, [fetchBranch])
 
-  // --- persist folder paths whenever they change (after initial load) ---
+  // --- persist full session (folders + terminals + active) after initial load ---
   useEffect(() => {
     if (!loadedRef.current) return
-    window.workspace.save(workspaces.map(w => w.path))
-  }, [workspaces])
+    const w = workspaces.find(ws => ws.terminals.some(t => t.id === activeId))
+    const t = w?.terminals.find(t => t.id === activeId)
+    window.workspace.save({
+      version: 1,
+      active: w && t ? { path: w.path, name: t.name } : undefined,
+      workspaces: workspaces.map(ws => ({
+        path: ws.path,
+        collapsed: ws.collapsed,
+        terminals: ws.terminals.map(t => ({ name: t.name, cwd: t.cwd, kind: t.kind, claudeSessionId: t.sessionId }))
+      }))
+    })
+  }, [workspaces, activeId])
 
   // --- busy indicator: a terminal is "running" if it emitted output recently ---
   useEffect(() => {
@@ -155,10 +212,35 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [activeWorkspace, workspaces, activeId, spawnTerminal, removeTerminal])
 
+  // --- sidebar resize (drag handle) ---
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizingRef.current = true
+  }, [])
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return
+      // sidebar starts after the 48px activity rail
+      setSidebarWidth(Math.min(640, Math.max(220, e.clientX - 48)))
+    }
+    const onUp = () => { resizingRef.current = false }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('taw.sidebarWidth', String(sidebarWidth))
+  }, [sidebarWidth])
+
   const shortHome = (p: string) => (home && p.startsWith(home) ? '~' + p.slice(home.length) : p)
 
   return (
-    <div className="workspace-root">
+    <div className="workspace-root" style={{ ['--sidebar-w' as string]: `${sidebarWidth}px` }}>
       {/* Decorative activity rail */}
       <div className="ws-rail">
         <div className="rail-ic active">{'>_'}</div>
@@ -182,9 +264,16 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
           const ws = workspaces.find(w => w.id === wsId)
           if (ws) spawnTerminal(ws.id, ws.path)
         }}
+        onAddClaude={(wsId) => {
+          const ws = workspaces.find(w => w.id === wsId)
+          if (ws) spawnTerminal(ws.id, ws.path, 'claude')
+        }}
         onSelectTerminal={setActiveId}
         onCloseTerminal={removeTerminal}
       />
+
+      {/* Drag to resize the sidebar */}
+      <div className="ws-resizer" onMouseDown={startResize} />
 
       <div className="ws-main">
         {/* Top tab bar: terminals of the active workspace */}
@@ -201,11 +290,18 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
             </div>
           ))}
           {activeWorkspace && (
-            <button
-              className="ws-tab-add"
-              title="New terminal (⌘T)"
-              onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}
-            >+</button>
+            <>
+              <button
+                className="ws-tab-add"
+                title="New terminal (⌘T)"
+                onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}
+              >+</button>
+              <button
+                className="ws-tab-add claude"
+                title="New Claude Code session"
+                onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path, 'claude')}
+              >✳</button>
+            </>
           )}
         </div>
 
@@ -231,6 +327,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
               id={t.id}
               isActive={t.id === activeId}
               cwd={t.cwd}
+              initialCommand={t.initialCommand}
               onImagePaste={onImagePaste}
             />
           ))}

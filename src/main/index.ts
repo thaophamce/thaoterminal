@@ -103,20 +103,20 @@ ipcMain.handle('dialog:openFolder', async () => {
 
 const workspacesFile = () => join(app.getPath('userData'), 'workspaces.json')
 
-// Persisted workspace folder paths (terminals themselves are session-only)
+// Persisted session: folders + the terminals (name + cwd) that existed in each,
+// so the layout can be re-spawned on next launch. Running processes cannot be
+// restored — only the structure and working directories.
 ipcMain.handle('workspaces:load', () => {
   try {
-    const raw = fs.readFileSync(workspacesFile(), 'utf8')
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as string[]) : null
+    return JSON.parse(fs.readFileSync(workspacesFile(), 'utf8'))
   } catch {
     return null
   }
 })
 
-ipcMain.handle('workspaces:save', (_, paths: string[]) => {
+ipcMain.handle('workspaces:save', (_, state: unknown) => {
   try {
-    fs.writeFileSync(workspacesFile(), JSON.stringify(paths, null, 2))
+    fs.writeFileSync(workspacesFile(), JSON.stringify(state, null, 2))
   } catch {
     // best-effort persistence
   }

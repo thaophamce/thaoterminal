@@ -13,10 +13,12 @@ interface Props {
   id: string
   isActive: boolean
   cwd?: string
+  /** Command auto-run once after the shell is ready (e.g. `claude --resume <id>`) */
+  initialCommand?: string
   onImagePaste?: (dataUrl: string) => void
 }
 
-export function TerminalInstance({ id, isActive, cwd, onImagePaste }: Props) {
+export function TerminalInstance({ id, isActive, cwd, initialCommand, onImagePaste }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -79,6 +81,14 @@ export function TerminalInstance({ id, isActive, cwd, onImagePaste }: Props) {
       if (exitId === id) ptyAlive = false
     })
 
+    // Auto-run an initial command (e.g. launch/resume a Claude Code session)
+    // once the login shell has had a moment to become ready for input.
+    if (initialCommand) {
+      setTimeout(() => {
+        if (ptyAlive) window.terminal.write(id, initialCommand + '\r')
+      }, 700)
+    }
+
     // Track scroll position via DOM scroll event on xterm viewport
     const viewport = container.querySelector('.xterm-viewport') as HTMLElement | null
     const handleViewportScroll = () => {
@@ -103,6 +113,7 @@ export function TerminalInstance({ id, isActive, cwd, onImagePaste }: Props) {
     return () => {
       initializedRef.current = false
       removeDataListener()
+      removeExitListener()
       inputDisposable.dispose()
       viewport?.removeEventListener('scroll', handleViewportScroll)
       writeDisposable.dispose()
