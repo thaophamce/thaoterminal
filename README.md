@@ -34,6 +34,7 @@ You (keystrokes) ─→ Xterm.js ─→ IPC ─→ PTY Manager ─→ Shell (zsh
 
 ## Features
 
+- **Workspace Paths** — pin folders in a left sidebar; click **+** on a folder to spawn a shell rooted right in that directory. Terminals are grouped by folder, with live status dots and git branch. Pinned folders persist across restarts.
 - **GPU-accelerated rendering** — WebGL-powered Xterm.js, smooth 60fps output
 - **Multi-tab terminals** — `Cmd+T` to create, `Cmd+W` to close
 - **Split panes** — `Cmd+D` to split, `Cmd+Shift+D` to toggle direction

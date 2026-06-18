@@ -3,8 +3,7 @@
  * Multi-tab terminal with split panes, image paste, and themes
  */
 import { useState, useCallback } from 'react'
-import { TerminalTabs } from './components/terminal-tabs'
-import { SplitContainer } from './components/split-container'
+import { WorkspaceLayout } from './components/workspace-layout'
 import { ThemeProvider, useTheme } from './hooks/use-theme'
 import { ImageOverlay } from './components/image-overlay'
 
@@ -40,7 +39,7 @@ function AppContent() {
       </div>
 
       {/* Main content */}
-      <SplitContainer onImagePaste={handleImagePaste} />
+      <WorkspaceLayout onImagePaste={handleImagePaste} />
 
       {/* Image overlay when pasted */}
       {pastedImage && (

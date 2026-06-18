@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TawTerminal — Workspace Paths UI Mockup</title>
+<style>
+  :root{
+    --bg:#0c0e14; --panel:#11131b; --panel2:#0e1017; --card:#141823;
+    --border:#1e2330; --border2:#262c3b;
+    --fg:#c8cdda; --muted:#6b7280; --dim:#8b93a7;
+    --accent:#7dd3fc; --accent2:#a78bfa; --green:#34d399; --purple:#8b5cf6;
+    --pink:#f472b6; --yellow:#fbbf24; --blue:#60a5fa;
+    --mono:'SF Mono','JetBrains Mono','Fira Code',ui-monospace,Menlo,monospace;
+    --sans:-apple-system,'Inter',system-ui,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:13px;overflow:hidden}
+  .app{display:flex;flex-direction:column;height:100vh}
+
+  /* ---------- Title bar ---------- */
+  .titlebar{height:54px;display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0f111a,#0c0e14)}
+  .logo{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;color:var(--accent);font-family:var(--mono);font-size:15px}
+  .brand{font-weight:600;font-size:15px;letter-spacing:.2px}
+  .search{flex:1;max-width:620px;margin:0 auto;display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--border2);border-radius:10px;padding:9px 14px;color:var(--muted)}
+  .search .kbd{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim);border:1px solid var(--border2);border-radius:5px;padding:1px 6px}
+  .winbtns{display:flex;align-items:center;gap:16px;color:var(--dim)}
+  .winbtns .ic{cursor:pointer}
+  .wctl{display:flex;gap:10px;margin-left:6px}
+  .wctl span{width:13px;height:13px;display:inline-block;color:var(--dim)}
+
+  /* ---------- Body ---------- */
+  .body{flex:1;display:flex;min-height:0}
+  .rail{width:52px;border-right:1px solid var(--border);background:var(--panel2);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:18px}
+  .rail .ric{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--dim);cursor:pointer}
+  .rail .ric.active{background:#1a2030;color:var(--accent)}
+  .rail .spacer{flex:1}
+  .rail .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#4b5563,#1f2937);border:1px solid var(--border2);position:relative}
+  .rail .avatar::after{content:'';position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;background:var(--green);border:2px solid var(--panel2)}
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{width:430px;border-right:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+  .side-head{display:flex;align-items:center;gap:10px;padding:14px 16px 12px}
+  .side-head h2{font-size:13px;font-weight:600;letter-spacing:.3px}
+  .pill{font-size:11px;color:var(--dim);background:#161a26;border:1px solid var(--border2);border-radius:20px;padding:3px 10px}
+  .side-head .ic{margin-left:auto;color:var(--dim);cursor:pointer}
+  .side-scroll{flex:1;overflow:auto;padding:0 12px 12px}
+
+  .folder{margin-bottom:14px}
+  .folder-head{display:flex;align-items:center;gap:8px;padding:7px 6px;border-radius:8px;cursor:pointer;color:var(--dim)}
+  .folder-head:hover{background:#13161f}
+  .chev{transition:transform .15s;color:var(--muted)}
+  .folder.collapsed .chev{transform:rotate(-90deg)}
+  .folder-path{font-family:var(--mono);font-size:12px;color:var(--fg)}
+  .folder-path .root{color:var(--muted)}
+  .badge{font-size:10.5px;color:var(--accent);background:#0e1b24;border:1px solid #1a3340;border-radius:20px;padding:2px 9px}
+  .add{margin-left:auto;width:24px;height:24px;border-radius:7px;border:1px solid var(--border2);background:#10131c;color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;flex:0 0 auto}
+  .add:hover{background:#16202b;border-color:#2a4150}
+
+  .terms{padding:6px 0 0 12px;display:flex;flex-direction:column;gap:10px}
+  .folder.collapsed .terms{display:none}
+  .tcard{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 13px;cursor:pointer}
+  .tcard.active{border-color:#2c4a3a;box-shadow:0 0 0 1px #1d3b2c inset, 0 0 16px -8px var(--green)}
+  .tcard-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+  .dot.idle{background:var(--purple)}
+  .tname{font-size:12.5px;font-weight:600;color:#e2e6ef}
+  .state{margin-left:auto;font-size:10px;color:var(--green);background:#0e1f17;border:1px solid #1c3a2a;border-radius:20px;padding:2px 8px}
+  .more{color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+  .tcard.active .state ~ .more{margin-left:6px}
+  pre{font-family:var(--mono);font-size:11px;line-height:1.55;color:#aeb6c6;white-space:pre-wrap;word-break:break-word}
+  .prompt{color:var(--green)}
+  .ps-host{color:var(--green)} .ps-path{color:var(--blue)} .ps-git{color:var(--purple)}
+  .cmd{color:#e2e6ef} .ok{color:var(--green)} .url{color:var(--accent)} .warn{color:var(--yellow)}
+  .caret{display:inline-block;width:8px;height:14px;background:var(--green);vertical-align:-2px;animation:blink 1.1s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  .spawn-row{display:flex;align-items:center;justify-content:center;gap:9px;margin:6px 2px 0;padding:11px;border:1px dashed var(--border2);border-radius:10px;color:var(--dim);cursor:pointer;font-size:12px}
+  .spawn-row:hover{border-color:#2a4150;color:var(--accent);background:#0f141c}
+  .spawn-row b{color:var(--accent);font-weight:700}
+
+  .hint{margin:10px 0 4px;align-self:flex-start;background:#15121f;border:1px solid #2a2440;color:#c4b5fd;border-radius:9px;padding:8px 11px;font-size:11px;line-height:1.4;max-width:150px}
+
+  /* ---------- Main terminal ---------- */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--panel);margin:8px 8px 8px 0;border:1px solid var(--border2);border-radius:12px;overflow:hidden}
+  .tabs{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border)}
+  .tab{display:flex;align-items:center;gap:9px;background:#141823;border:1px solid var(--border2);border-radius:8px;padding:7px 12px;font-size:12.5px}
+  .tab .x{color:var(--muted);cursor:pointer}
+  .tab-add{width:28px;height:28px;border-radius:8px;border:1px solid var(--border2);color:var(--dim);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px}
+  .toolbar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:12px}
+  .toolbar .path{color:var(--fg)} .toolbar .git{color:var(--purple)}
+  .toolbar .right{margin-left:auto;display:flex;align-items:center;gap:14px}
+  .toolbar .shell{display:flex;align-items:center;gap:6px;color:var(--green)}
+  .toolbar .tic{color:var(--dim);cursor:pointer;font-size:15px}
+  .term{flex:1;overflow:auto;padding:18px 22px;font-family:var(--mono);font-size:13px;line-height:1.75}
+  .term .blank{height:14px}
+  .claude-card{margin:12px 0;background:#0f1622;border:1px solid #1d2c3a;border-radius:10px;padding:14px 16px;max-width:480px}
+  .claude-card .ch{display:flex;align-items:center;gap:9px;font-size:14px;margin-bottom:7px}
+  .claude-card .star{color:var(--accent)}
+  .claude-card .name{font-weight:700;color:#e2e6ef}
+  .claude-card .ver{color:var(--dim)}
+  .claude-card .pro{margin-left:auto;font-size:10px;color:#ddd6fe;background:#2a2150;border:1px solid #3b2f6b;border-radius:6px;padding:2px 8px}
+  .claude-card .line{color:#aeb6c6;font-size:12px;line-height:1.7}
+  .claude-card .slash{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Title bar -->
+  <div class="titlebar">
+    <div class="logo">&gt;_</div>
+    <div class="brand">TawTerminal</div>
+    <div class="search">
+      <span>🔍</span><span style="color:var(--muted)">Search workspace paths or terminals…</span>
+      <span class="kbd">⌘K</span>
+    </div>
+    <div class="winbtns">
+      <span class="ic">▥</span><span class="ic">⚙</span>
+      <span class="wctl"><span>—</span><span>▢</span><span>✕</span></span>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- Rail -->
+    <div class="rail">
+      <div class="ric active">&gt;_</div>
+      <div class="ric">▦</div>
+      <div class="ric">🕘</div>
+      <div class="ric">⎇</div>
+      <div class="ric">🔌</div>
+      <div class="spacer"></div>
+      <div class="avatar"></div>
+      <div class="ric">⚙</div>
+    </div>
+
+    <!-- Sidebar: Workspace Paths -->
+    <div class="sidebar">
+      <div class="side-head">
+        <h2>Workspace Paths</h2>
+        <span class="pill">4 folders</span>
+        <span class="ic">⇅</span>
+      </div>
+      <div class="side-scroll">
+
+        <!-- Folder 1 -->
+        <div class="folder">
+          <div class="folder-head">
+            <span class="chev">▾</span>
+            <span>📁</span>
+            <span class="folder-path"><span class="root">/Users/nghia/projects/</span>agribeacon</span>
+            <span class="badge">2 terminals</span>
+            <span class="add">+</span>
+          </div>
+          <div class="terms">
+            <div class="tcard active">
+              <div class="tcard-head"><span class="dot"></span><span class="tname">Terminal 2</span><span class="state">active</span><span class="more">⋯</span></div>
+              <pre><span class="ps-host">nghia@agribeacon</span> <span class="ps-path">~/projects/agribeacon</span> <span class="ps-git">⎇ main</span>
+<span class="prompt">$</span> <span class="cmd">git status</span>
+On branch main
+Your branch is up to date with 'origin/main'.
+nothing to commit, working tree clean</pre>
+            </div>
+            <div class="tcard">
+              <div class="tcard-head"><span class="dot idle"></span><span class="tname">Terminal 3</span><span class="more" style="margin-left:auto">⋯</span></div>
+              <pre><span class="ps-host">nghia@agribeacon</span> <span class="ps-path">~/projects/agribeacon</span> <span class="ps-git">⎇ main</span>
+<span class="prompt">$</span> <span class="cmd">npm run dev</span>
+&gt; vite
+  <span class="warn">VITE</span> v5.1.0  ready in 517 ms
+  → <b style="color:#e2e6ef">Local:</b>  <span class="url">http://localhost:5173/</span></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Folder 2 -->
+        <div class="folder">
+          <div class="folder-head">
+            <span class="chev">▾</span><span>📁</span>
+            <span class="folder-path"><span class="root">/Users/nghia/projects/</span>frontend-app</span>
+            <span class="badge">1 terminal</span><span class="add">+</span>
+          </div>
+          <div class="terms">
+            <div class="tcard">
+              <div class="tcard-head"><span class="dot"></span><span class="tname">Terminal 1</span><span class="more" style="margin-left:auto">⋯</span></div>
+              <pre><span class="ps-host">nghia@frontend-app</span> <span class="ps-path">~/projects/frontend-app</span> <span class="ps-git">⎇ main</span>
+<span class="prompt">$</span> <span class="cmd">npm run dev</span>
+&gt; next dev
+  ▲ Next.js 14.2.1
+  - <b style="color:#e2e6ef">Local:</b>  <span class="url">http://localhost:3000</span></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Folder 3 -->
+        <div class="folder">
+          <div class="folder-head">
+            <span class="chev">▾</span><span>📁</span>
+            <span class="folder-path"><span class="root">/Users/nghia/Documents/</span>research</span>
+            <span class="badge">1 terminal</span><span class="add">+</span>
+          </div>
+          <div class="terms">
+            <div class="tcard">
+              <div class="tcard-head"><span class="dot"></span><span class="tname">Terminal 4</span><span class="more" style="margin-left:auto">⋯</span></div>
+              <pre><span class="ps-host">nghia@research</span> <span class="ps-path">~/Documents/research</span> <span class="ps-git">⎇ main</span>
+<span class="prompt">$</span> <span class="cmd">python main.py</span>
+Loading data...
+Training model...
+Accuracy: 92.37%
+<span class="prompt">$</span> <span class="caret"></span></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Folder 4 collapsed -->
+        <div class="folder collapsed">
+          <div class="folder-head">
+            <span class="chev">▾</span><span>📁</span>
+            <span class="folder-path"><span class="root">/Users/nghia/Desktop/</span>experiments</span>
+            <span class="add" style="margin-left:auto">+</span>
+          </div>
+          <div class="terms"></div>
+        </div>
+
+        <div class="spawn-row">⊕&nbsp; Click <b>+</b> to spawn terminal here</div>
+        <div class="hint">↑ Click <b>+</b> creates a new terminal right inside that folder’s path</div>
+      </div>
+    </div>
+
+    <!-- Main terminal -->
+    <div class="main">
+      <div class="tabs">
+        <div class="tab"><span style="color:var(--green)">&gt;_</span> Terminal 2 <span class="x">✕</span></div>
+        <div class="tab-add">+</div>
+      </div>
+      <div class="toolbar">
+        📁 <span class="path">/Users/nghia/projects/agribeacon</span> &nbsp;<span class="git">⎇ main</span>
+        <div class="right">
+          <span class="shell">● zsh</span>
+          <span class="tic">+</span><span class="tic">▥</span><span class="tic">🗑</span>
+        </div>
+      </div>
+      <div class="term">
+<pre><span class="ps-host">nghia@agribeacon</span> <span class="ps-path">~/projects/agribeacon</span> <span class="ps-git">⎇ main</span>
+<span class="prompt">$</span> <span class="cmd">git status</span>
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+</pre>
+<div class="blank"></div>
+<pre><span class="ps-host">nghia@agribeacon</span> <span class="ps-path">~/projects/agribeacon</span> <span class="ps-git">⎇ main</span>
+<span class="prompt">$</span> <span class="cmd">npm run dev</span>
+&gt; agribeacon@1.0.0 dev
+&gt; vite
+
+  <span class="warn">VITE</span> v5.1.0  ready in 517 ms
+
+  → <b style="color:#e2e6ef">Local:</b>    <span class="url">http://localhost:5173/</span>
+  → <b style="color:#e2e6ef">Network:</b>  use <span class="warn">--host</span> to expose
+</pre>
+<div class="blank"></div>
+<pre><span class="ps-host">nghia@agribeacon</span> <span class="ps-path">~/projects/agribeacon</span> <span class="ps-git">⎇ main</span>
+<span class="prompt">$</span> <span class="cmd">claude</span></pre>
+        <div class="claude-card">
+          <div class="ch"><span class="star">✳</span><span class="name">Claude</span><span class="ver">Opus 4.8</span><span class="pro">Pro</span></div>
+          <div class="line">Claude Code v1.0.12<br>Type <span class="slash">/help</span> for commands</div>
+        </div>
+<pre><span class="ps-host">nghia@agribeacon</span> <span class="ps-path">~/projects/agribeacon</span> <span class="ps-git">⎇ main</span>
+<span class="prompt">$</span> <span class="caret"></span></pre>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

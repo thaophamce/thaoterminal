@@ -2,8 +2,10 @@
  * TawTerminal - Main Process
  * Electron app entry point
  */
-import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import { join } from 'path'
+import os from 'os'
+import fs from 'fs'
 import { PtyManager } from './pty-manager'
 
 const ptyManager = new PtyManager()
@@ -75,6 +77,56 @@ ipcMain.handle('app:openExternal', (_, url: string) => {
 
 ipcMain.handle('app:getTheme', () => {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+})
+
+ipcMain.handle('app:getHome', () => os.homedir())
+
+// --- Workspace IPC ---
+
+// Open native folder picker, return the chosen directory (or null if cancelled)
+ipcMain.handle('dialog:openFolder', async () => {
+  if (!mainWindow) return null
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Add a workspace folder'
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
+
+const workspacesFile = () => join(app.getPath('userData'), 'workspaces.json')
+
+// Persisted workspace folder paths (terminals themselves are session-only)
+ipcMain.handle('workspaces:load', () => {
+  try {
+    const raw = fs.readFileSync(workspacesFile(), 'utf8')
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as string[]) : null
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('workspaces:save', (_, paths: string[]) => {
+  try {
+    fs.writeFileSync(workspacesFile(), JSON.stringify(paths, null, 2))
+  } catch {
+    // best-effort persistence
+  }
+})
+
+// Resolve the current git branch for a folder (null if not a repo)
+ipcMain.handle('git:branch', async (_, cwd: string) => {
+  try {
+    const { execFile } = await import('child_process')
+    return await new Promise<string | null>((resolve) => {
+      execFile('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 1500 }, (err, stdout) => {
+        resolve(err ? null : stdout.trim() || null)
+      })
+    })
+  } catch {
+    return null
+  }
 })
 
 // --- App Lifecycle ---

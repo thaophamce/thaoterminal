@@ -1,0 +1,134 @@
+/**
+ * Workspace Sidebar - folder tree grouping terminals by working directory.
+ * Each folder is a saved path; clicking + spawns a terminal rooted in that path.
+ */
+export interface Term {
+  id: string
+  name: string
+  cwd: string
+}
+
+export interface Workspace {
+  id: string
+  path: string
+  branch?: string | null
+  collapsed?: boolean
+  terminals: Term[]
+}
+
+interface Props {
+  workspaces: Workspace[]
+  activeId: string | null
+  busy: Set<string>
+  home: string
+  query: string
+  onQuery: (q: string) => void
+  onAddFolder: () => void
+  onRemoveFolder: (id: string) => void
+  onToggle: (id: string) => void
+  onAddTerminal: (workspaceId: string) => void
+  onSelectTerminal: (id: string) => void
+  onCloseTerminal: (id: string) => void
+}
+
+/** Split a path into a dim parent + a bright basename for display. */
+function splitPath(p: string, home: string): { parent: string; base: string } {
+  let display = p
+  if (home && p.startsWith(home)) display = '~' + p.slice(home.length)
+  const idx = display.lastIndexOf('/')
+  if (idx <= 0) return { parent: '', base: display }
+  return { parent: display.slice(0, idx + 1), base: display.slice(idx + 1) }
+}
+
+export function WorkspaceSidebar({
+  workspaces, activeId, busy, home, query, onQuery,
+  onAddFolder, onRemoveFolder, onToggle, onAddTerminal, onSelectTerminal, onCloseTerminal
+}: Props) {
+  const q = query.trim().toLowerCase()
+  const filtered = q
+    ? workspaces
+        .map(w => ({
+          ...w,
+          terminals: w.terminals.filter(
+            t => t.name.toLowerCase().includes(q) || w.path.toLowerCase().includes(q)
+          )
+        }))
+        .filter(w => w.path.toLowerCase().includes(q) || w.terminals.length > 0)
+    : workspaces
+
+  return (
+    <div className="ws-sidebar">
+      <div className="ws-head">
+        <h2>Workspace Paths</h2>
+        <span className="ws-pill">{workspaces.length} {workspaces.length === 1 ? 'folder' : 'folders'}</span>
+        <button className="ws-icbtn" title="Add folder" onClick={onAddFolder}>+</button>
+      </div>
+
+      <div className="ws-search">
+        <span>🔍</span>
+        <input
+          placeholder="Search paths or terminals…"
+          value={query}
+          onChange={(e) => onQuery(e.target.value)}
+        />
+      </div>
+
+      <div className="ws-scroll">
+        {filtered.map(ws => {
+          const { parent, base } = splitPath(ws.path, home)
+          const count = ws.terminals.length
+          return (
+            <div key={ws.id} className={`ws-folder ${ws.collapsed ? 'collapsed' : ''}`}>
+              <div className="folder-head">
+                <button className="chev" onClick={() => onToggle(ws.id)}>▾</button>
+                <span className="folder-ic">📁</span>
+                <span className="folder-path" title={ws.path}>
+                  <span className="root">{parent}</span>{base}
+                </span>
+                {ws.branch && <span className="folder-branch">⎇ {ws.branch}</span>}
+                {count > 0 && <span className="folder-badge">{count} {count === 1 ? 'terminal' : 'terminals'}</span>}
+                <button className="folder-add" title="Spawn terminal here" onClick={() => onAddTerminal(ws.id)}>+</button>
+                <button className="folder-rm" title="Remove folder" onClick={() => onRemoveFolder(ws.id)}>🗑</button>
+              </div>
+
+              {!ws.collapsed && (
+                <div className="terms">
+                  {ws.terminals.map(t => {
+                    const isActive = t.id === activeId
+                    const isBusy = busy.has(t.id)
+                    return (
+                      <div
+                        key={t.id}
+                        className={`term-card ${isActive ? 'active' : ''}`}
+                        onClick={() => onSelectTerminal(t.id)}
+                      >
+                        <span className={`status-dot ${isBusy ? 'busy' : 'idle'}`} />
+                        <span className="term-name">{t.name}</span>
+                        {isActive && <span className="term-state">active</span>}
+                        {!isActive && isBusy && <span className="term-running">running</span>}
+                        <button
+                          className="term-close"
+                          title="Close terminal"
+                          onClick={(e) => { e.stopPropagation(); onCloseTerminal(t.id) }}
+                        >×</button>
+                      </div>
+                    )
+                  })}
+                  {count === 0 && (
+                    <button className="terms-empty" onClick={() => onAddTerminal(ws.id)}>
+                      ⊕ Spawn terminal here
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        <button className="ws-addrow" onClick={onAddFolder}>
+          ⊕&nbsp; Add workspace folder
+        </button>
+      </div>
+    </div>
+  )
+}

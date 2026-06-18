@@ -24,5 +24,13 @@ contextBridge.exposeInMainWorld('terminal', {
 
 contextBridge.exposeInMainWorld('app', {
   getTheme: () => ipcRenderer.invoke('app:getTheme'),
+  getHome: () => ipcRenderer.invoke('app:getHome'),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url)
+})
+
+contextBridge.exposeInMainWorld('workspace', {
+  openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
+  load: () => ipcRenderer.invoke('workspaces:load'),
+  save: (paths: string[]) => ipcRenderer.invoke('workspaces:save', paths),
+  gitBranch: (cwd: string) => ipcRenderer.invoke('git:branch', cwd)
 })
