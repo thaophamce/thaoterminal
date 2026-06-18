@@ -2,7 +2,9 @@
  * Workspace Sidebar - folder tree grouping terminals by working directory.
  * Each folder is a saved path; clicking + spawns a terminal rooted in that path.
  */
+import { useState } from 'react'
 import { ClaudeIcon, CodexIcon } from './icons'
+import type { UsageSnapshot } from '../../preload/index.d'
 
 export type TermKind = 'shell' | 'claude' | 'codex'
 
@@ -39,6 +41,14 @@ interface Props {
   onAddCodex: (workspaceId: string) => void
   onSelectTerminal: (id: string) => void
   onCloseTerminal: (id: string) => void
+  onRenameTerminal: (id: string, name: string) => void
+  usage: UsageSnapshot | null
+}
+
+function fmtTok(n: number): string {
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'
+  return String(n)
 }
 
 /** Split a path into a dim parent + a bright basename for display. */
@@ -52,8 +62,17 @@ function splitPath(p: string, home: string): { parent: string; base: string } {
 
 export function WorkspaceSidebar({
   workspaces, activeId, busy, home, query, onQuery,
-  onAddFolder, onRemoveFolder, onToggle, onAddTerminal, onAddClaude, onAddCodex, onSelectTerminal, onCloseTerminal
+  onAddFolder, onRemoveFolder, onToggle, onAddTerminal, onAddClaude, onAddCodex,
+  onSelectTerminal, onCloseTerminal, onRenameTerminal, usage
 }: Props) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const startRename = (t: Term) => { setEditingId(t.id); setEditValue(t.name) }
+  const commitRename = () => {
+    if (editingId && editValue.trim()) onRenameTerminal(editingId, editValue.trim())
+    setEditingId(null)
+  }
+
   const q = query.trim().toLowerCase()
   const filtered = q
     ? workspaces
@@ -117,7 +136,27 @@ export function WorkspaceSidebar({
                         <span className={`status-dot ${isBusy ? 'busy' : 'idle'}`} />
                         {t.kind === 'claude' && <span className="term-kind-ic claude" title="Claude Code"><ClaudeIcon size={12} /></span>}
                         {t.kind === 'codex' && <span className="term-kind-ic codex" title="Codex"><CodexIcon size={12} /></span>}
-                        <span className="term-name">{t.name}</span>
+                        {editingId === t.id ? (
+                          <input
+                            className="term-rename"
+                            autoFocus
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={commitRename}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitRename()
+                              if (e.key === 'Escape') setEditingId(null)
+                              e.stopPropagation()
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span
+                            className="term-name"
+                            title="Double-click to rename"
+                            onDoubleClick={(e) => { e.stopPropagation(); startRename(t) }}
+                          >{t.name}</span>
+                        )}
                         {isActive && <span className="term-state">active</span>}
                         {!isActive && isBusy && <span className="term-running">running</span>}
                         <button
@@ -151,6 +190,24 @@ export function WorkspaceSidebar({
           ⊕&nbsp; Add workspace folder
         </button>
       </div>
+
+      {usage && (
+        <div className="ws-usage" title="Token usage today (from ~/.claude and ~/.codex)">
+          <div className="ws-usage-head">Today's usage</div>
+          <div className="ws-usage-row">
+            <span className="u-ic claude"><ClaudeIcon size={12} /></span>
+            <span className="u-name">Claude</span>
+            <span className="u-tok">{fmtTok(usage.claude.tokens)}</span>
+            <span className="u-cost">~${usage.claude.cost.toFixed(2)}</span>
+          </div>
+          <div className="ws-usage-row">
+            <span className="u-ic codex"><CodexIcon size={12} /></span>
+            <span className="u-name">Codex</span>
+            <span className="u-tok">{fmtTok(usage.codex.tokens)}</span>
+            <span className="u-cost">~${usage.codex.cost.toFixed(2)}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

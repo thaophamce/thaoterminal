@@ -8,6 +8,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { TerminalInstance } from './terminal-instance'
 import { WorkspaceSidebar, Workspace, Term, TermKind } from './workspace-sidebar'
 import { ClaudeIcon, CodexIcon, TerminalIcon } from './icons'
+import type { UsageSnapshot } from '../../preload/index.d'
 
 let termCounter = 0
 const nextTermId = () => `term-${++termCounter}`
@@ -27,6 +28,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     const saved = Number(localStorage.getItem('taw.sidebarWidth'))
     return saved >= 220 && saved <= 640 ? saved : 340
   })
+  const [usage, setUsage] = useState<UsageSnapshot | null>(null)
   const loadedRef = useRef(false)
   const resizingRef = useRef(false)
   const busyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -208,6 +210,22 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     setWorkspaces(prev => prev.map(w => (w.id === wsId ? { ...w, collapsed: !w.collapsed } : w)))
   }, [])
 
+  const renameTerminal = useCallback((termId: string, name: string) => {
+    setWorkspaces(prev => prev.map(w => ({
+      ...w,
+      terminals: w.terminals.map(t => (t.id === termId ? { ...t, name } : t))
+    })))
+  }, [])
+
+  // --- poll today's Claude/Codex usage for the sidebar footer ---
+  useEffect(() => {
+    let alive = true
+    const tick = () => window.usage.get().then(u => { if (alive) setUsage(u) }).catch(() => {})
+    tick()
+    const iv = setInterval(tick, 20000)
+    return () => { alive = false; clearInterval(iv) }
+  }, [])
+
   // --- keyboard shortcuts ---
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -288,6 +306,8 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         }}
         onSelectTerminal={setActiveId}
         onCloseTerminal={removeTerminal}
+        onRenameTerminal={renameTerminal}
+        usage={usage}
       />
 
       {/* Drag to resize the sidebar */}

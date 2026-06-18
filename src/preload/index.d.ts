@@ -42,10 +42,28 @@ export interface WorkspaceAPI {
   gitBranch: (cwd: string) => Promise<string | null>
 }
 
+export interface UsageStat {
+  tokens: number
+  cost: number
+  input: number
+  output: number
+}
+
+export interface UsageSnapshot {
+  claude: UsageStat
+  codex: UsageStat
+}
+
+export interface UsageAPI {
+  /** Aggregate today's token usage/cost from ~/.claude and ~/.codex */
+  get: () => Promise<UsageSnapshot>
+}
+
 declare global {
   interface Window {
     terminal: TerminalAPI
     app: AppAPI
     workspace: WorkspaceAPI
+    usage: UsageAPI
   }
 }

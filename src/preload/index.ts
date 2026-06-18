@@ -34,3 +34,7 @@ contextBridge.exposeInMainWorld('workspace', {
   save: (paths: string[]) => ipcRenderer.invoke('workspaces:save', paths),
   gitBranch: (cwd: string) => ipcRenderer.invoke('git:branch', cwd)
 })
+
+contextBridge.exposeInMainWorld('usage', {
+  get: () => ipcRenderer.invoke('usage:get')
+})

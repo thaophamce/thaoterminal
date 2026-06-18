@@ -136,6 +136,152 @@ ipcMain.handle('git:branch', async (_, cwd: string) => {
   }
 })
 
+// --- Usage tracking (today's tokens/cost from Claude Code & Codex) ---
+
+// Price per 1M tokens [input, output, cacheWrite, cacheRead]
+const CLAUDE_PRICING: Record<string, [number, number, number, number]> = {
+  opus: [15, 75, 18.75, 1.5],
+  sonnet: [3, 15, 3.75, 0.3],
+  haiku: [0.8, 4, 1, 0.08]
+}
+// Codex/GPT rough pricing [input, output, cachedInput]
+const CODEX_PRICING: [number, number, number] = [1.25, 10, 0.125]
+
+function claudePrice(model: string): [number, number, number, number] {
+  const m = (model || '').toLowerCase()
+  if (m.includes('opus')) return CLAUDE_PRICING.opus
+  if (m.includes('haiku')) return CLAUDE_PRICING.haiku
+  return CLAUDE_PRICING.sonnet
+}
+
+// Cache parsed per-file results so big unchanged transcripts aren't re-read
+const usageFileCache = new Map<string, { mtime: number; size: number; stat: { tokens: number; cost: number; input: number; output: number } }>()
+
+function walkJsonl(dir: string, out: string[]): void {
+  let entries: fs.Dirent[]
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+  for (const e of entries) {
+    const full = join(dir, e.name)
+    if (e.isDirectory()) walkJsonl(full, out)
+    else if (e.name.endsWith('.jsonl')) out.push(full)
+  }
+}
+
+function emptyStat() { return { tokens: 0, cost: 0, input: 0, output: 0 } }
+
+function claudeUsageToday(today: string) {
+  const total = emptyStat()
+  const root = join(os.homedir(), '.claude', 'projects')
+  const files: string[] = []
+  walkJsonl(root, files)
+  const startOfToday = new Date(today + 'T00:00:00').getTime()
+  for (const file of files) {
+    let st: fs.Stats
+    try { st = fs.statSync(file) } catch { continue }
+    if (st.mtimeMs < startOfToday) continue // no activity today
+    const cached = usageFileCache.get(file)
+    if (cached && cached.mtime === st.mtimeMs && cached.size === st.size) {
+      addStat(total, cached.stat); continue
+    }
+    const stat = emptyStat()
+    try {
+      const lines = fs.readFileSync(file, 'utf8').split('\n')
+      for (const line of lines) {
+        if (!line || line.indexOf('"usage"') === -1) continue
+        let obj: any
+        try { obj = JSON.parse(line) } catch { continue }
+        if (typeof obj.timestamp !== 'string' || obj.timestamp.slice(0, 10) !== today) continue
+        const u = obj.message?.usage
+        if (!u) continue
+        const inp = (u.input_tokens || 0)
+        const out = (u.output_tokens || 0)
+        const cw = (u.cache_creation_input_tokens || 0)
+        const cr = (u.cache_read_input_tokens || 0)
+        const [pi, po, pcw, pcr] = claudePrice(obj.message?.model)
+        stat.input += inp + cw + cr
+        stat.output += out
+        stat.tokens += inp + out + cw + cr
+        stat.cost += (inp * pi + out * po + cw * pcw + cr * pcr) / 1e6
+      }
+    } catch { /* skip unreadable */ }
+    usageFileCache.set(file, { mtime: st.mtimeMs, size: st.size, stat })
+    addStat(total, stat)
+  }
+  return total
+}
+
+function addStat(a: { tokens: number; cost: number; input: number; output: number }, b: typeof a) {
+  a.tokens += b.tokens; a.cost += b.cost; a.input += b.input; a.output += b.output
+}
+
+function codexUsageToday(d: Date) {
+  const total = emptyStat()
+  const yyyy = String(d.getFullYear())
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const dir = join(os.homedir(), '.codex', 'sessions', yyyy, mm, dd)
+  const files: string[] = []
+  walkJsonl(dir, files)
+  for (const file of files) {
+    let st: fs.Stats
+    try { st = fs.statSync(file) } catch { continue }
+    const cached = usageFileCache.get(file)
+    if (cached && cached.mtime === st.mtimeMs && cached.size === st.size) {
+      addStat(total, cached.stat); continue
+    }
+    const stat = emptyStat()
+    try {
+      // Each session logs a cumulative total_token_usage; take the last one
+      const lines = fs.readFileSync(file, 'utf8').split('\n')
+      let last: any = null
+      for (const line of lines) {
+        if (!line || line.indexOf('total_token_usage') === -1) continue
+        try {
+          const obj = JSON.parse(line)
+          const tu = findTotalUsage(obj)
+          if (tu) last = tu
+        } catch { /* skip */ }
+      }
+      if (last) {
+        const inp = last.input_tokens || 0
+        const cached2 = last.cached_input_tokens || 0
+        const out = last.output_tokens || 0
+        const [pi, po, pc] = CODEX_PRICING
+        stat.input += inp
+        stat.output += out
+        stat.tokens += last.total_tokens || inp + out
+        stat.cost += ((inp - cached2) * pi + cached2 * pc + out * po) / 1e6
+      }
+    } catch { /* skip */ }
+    usageFileCache.set(file, { mtime: st.mtimeMs, size: st.size, stat })
+    addStat(total, stat)
+  }
+  return total
+}
+
+function findTotalUsage(obj: any): any {
+  if (!obj || typeof obj !== 'object') return null
+  if (obj.total_token_usage) return obj.total_token_usage
+  for (const k of Object.keys(obj)) {
+    const v = obj[k]
+    if (v && typeof v === 'object') {
+      const found = findTotalUsage(v)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+ipcMain.handle('usage:get', () => {
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  try {
+    return { claude: claudeUsageToday(today), codex: codexUsageToday(now) }
+  } catch {
+    return { claude: emptyStat(), codex: emptyStat() }
+  }
+})
+
 // --- App Lifecycle ---
 
 app.whenReady().then(() => {

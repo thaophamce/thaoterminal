@@ -575,6 +575,18 @@ html, body, #root {
 .status-dot.idle { background: #8b5cf6; opacity: 0.7; }
 @keyframes dotpulse { 50% { opacity: 0.4; } }
 .term-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.term-rename {
+  flex: 1;
+  min-width: 0;
+  background: var(--background, #11131b);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  color: inherit;
+  font-size: 12.5px;
+  font-family: inherit;
+  padding: 2px 6px;
+  outline: none;
+}
 .term-state {
   font-size: 9.5px;
   color: #34d399;
@@ -636,6 +648,35 @@ html, body, #root {
   font-family: inherit;
 }
 .ws-addrow:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
+
+/* Usage footer (today's Claude/Codex tokens) */
+.ws-usage {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: 10px 14px 12px;
+  background: var(--panel2, rgba(0,0,0,0.18));
+}
+.ws-usage-head {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  opacity: 0.45;
+  margin-bottom: 7px;
+}
+.ws-usage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+.u-ic { display: inline-flex; align-items: center; }
+.u-ic.claude { color: #d97757; }
+.u-ic.codex { color: #10a37f; }
+.u-name { width: 48px; opacity: 0.85; }
+.u-tok { margin-left: auto; opacity: 0.95; font-family: "JetBrains Mono", monospace; }
+.u-cost { width: 64px; text-align: right; opacity: 0.6; font-family: "JetBrains Mono", monospace; }
 
 /* Main panel */
 .ws-main {
