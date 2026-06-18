@@ -262,7 +262,8 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMeta = e.metaKey || e.ctrlKey
-      if (isMeta && e.key === 't') {
+      // ⌘T or ⌘N: new terminal in the current (active) folder
+      if (isMeta && !e.shiftKey && (e.key === 't' || e.key === 'n')) {
         e.preventDefault()
         const ws = activeWorkspace || workspaces[0]
         if (ws) spawnTerminal(ws.id, ws.path)
@@ -321,13 +322,23 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
       <div className="ws-rail">
         <div className="rail-ic logo">{'>_'}</div>
         <button
-          className={`rail-ic toggle ${sidebarHidden ? '' : 'active'}`}
-          title="Toggle sidebar (⌘B)"
+          className={`rail-toggle ${sidebarHidden ? '' : 'active'}`}
+          title={sidebarHidden ? 'Show sidebar (⌘B)' : 'Hide sidebar (⌘B)'}
           onClick={() => setSidebarHidden(h => !h)}
-        >◧</button>
+        >
+          <span className="rt-ic">◧</span>
+          <span className="rt-kbd">⌘B</span>
+        </button>
         <div className="rail-spacer" />
         <div className="rail-ic">⚙</div>
       </div>
+
+      {/* Floating restore pill when the sidebar is hidden */}
+      {sidebarHidden && (
+        <button className="sidebar-restore" onClick={() => setSidebarHidden(false)} title="Show sidebar (⌘B)">
+          ◧ Show sidebar <kbd>⌘B</kbd>
+        </button>
+      )}
 
       {!sidebarHidden && <WorkspaceSidebar
         workspaces={workspaces}
@@ -396,7 +407,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
             <>
               <button
                 className="ws-tab-add"
-                title="New terminal (⌘T)"
+                title="New terminal in this folder (⌘T / ⌘N)"
                 onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}
               >+</button>
               <button
