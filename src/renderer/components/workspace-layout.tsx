@@ -31,6 +31,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   const [usage, setUsage] = useState<UsageSnapshot | null>(null)
   const [version, setVersion] = useState('')
   const [update, setUpdate] = useState<UpdateInfo | null>(null)
+  const [showHotkeys, setShowHotkeys] = useState(false)
   const loadedRef = useRef(false)
   const resizingRef = useRef(false)
   const busyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -39,6 +40,10 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   const allTerminals = workspaces.flatMap(w => w.terminals)
   const activeWorkspace = workspaces.find(w => w.terminals.some(t => t.id === activeId)) || null
   const activeTerm = allTerminals.find(t => t.id === activeId) || null
+
+  // First 9 terminals get a ⌘1–⌘9 jump shortcut
+  const hotkeyIndex: Record<string, number> = {}
+  allTerminals.slice(0, 9).forEach((t, i) => { hotkeyIndex[t.id] = i + 1 })
 
   // --- helpers ---
   const fetchBranch = useCallback((wsId: string, path: string) => {
@@ -233,10 +238,13 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     return () => { alive = false; clearInterval(iv) }
   }, [])
 
-  // --- version + update check (once on launch) ---
+  // --- version + update check (on launch, then every 30 min) ---
   useEffect(() => {
     window.app.getVersion().then(setVersion).catch(() => {})
-    window.app.checkUpdate().then(setUpdate).catch(() => {})
+    const check = () => window.app.checkUpdate().then(setUpdate).catch(() => {})
+    check()
+    const iv = setInterval(check, 30 * 60 * 1000)
+    return () => clearInterval(iv)
   }, [])
 
   const openReleases = useCallback(() => {
@@ -256,10 +264,32 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         e.preventDefault()
         if (activeId) removeTerminal(activeId)
       }
+      // ⌘1–⌘9: jump to the Nth terminal (across all folders)
+      if (isMeta && /^[1-9]$/.test(e.key)) {
+        e.preventDefault()
+        const all = workspaces.flatMap(w => w.terminals)
+        const t = all[parseInt(e.key, 10) - 1]
+        if (t) setActiveId(t.id)
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [activeWorkspace, workspaces, activeId, spawnTerminal, removeTerminal])
+
+  // Hold ⌘ (or Ctrl) to reveal the jump numbers on each terminal
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => { if (e.key === 'Meta' || e.key === 'Control') setShowHotkeys(true) }
+    const up = (e: KeyboardEvent) => { if (e.key === 'Meta' || e.key === 'Control') setShowHotkeys(false) }
+    const clear = () => setShowHotkeys(false)
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', clear)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', clear)
+    }
+  }, [])
 
   // --- sidebar resize (drag handle) ---
   const startResize = useCallback((e: React.MouseEvent) => {
@@ -328,12 +358,22 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         version={version}
         update={update}
         onOpenReleases={openReleases}
+        showHotkeys={showHotkeys}
+        hotkeyIndex={hotkeyIndex}
       />
 
       {/* Drag to resize the sidebar */}
       <div className="ws-resizer" onMouseDown={startResize} />
 
       <div className="ws-main">
+        {update?.hasUpdate && (
+          <button className="update-banner" onClick={openReleases}>
+            <span className="ub-dot" />
+            New version <b>v{update.latest}</b> available — click to update
+            <span className="ub-cta">Update →</span>
+          </button>
+        )}
+
         {/* Top tab bar: terminals of the active workspace */}
         <div className="ws-maintabs">
           {activeWorkspace?.terminals.map(t => (

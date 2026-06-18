@@ -46,6 +46,8 @@ interface Props {
   version: string
   update: UpdateInfo | null
   onOpenReleases: () => void
+  showHotkeys: boolean
+  hotkeyIndex: Record<string, number>
 }
 
 function fmtTok(n: number): string {
@@ -66,7 +68,8 @@ function splitPath(p: string, home: string): { parent: string; base: string } {
 export function WorkspaceSidebar({
   workspaces, activeId, busy, home, query, onQuery,
   onAddFolder, onRemoveFolder, onToggle, onAddTerminal, onAddClaude, onAddCodex,
-  onSelectTerminal, onCloseTerminal, onRenameTerminal, usage, version, update, onOpenReleases
+  onSelectTerminal, onCloseTerminal, onRenameTerminal, usage, version, update, onOpenReleases,
+  showHotkeys, hotkeyIndex
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -160,8 +163,14 @@ export function WorkspaceSidebar({
                             onDoubleClick={(e) => { e.stopPropagation(); startRename(t) }}
                           >{t.name}</span>
                         )}
-                        {isActive && <span className="term-state">active</span>}
-                        {!isActive && isBusy && <span className="term-running">running</span>}
+                        {showHotkeys && hotkeyIndex[t.id] ? (
+                          <span className="term-hotkey">⌘{hotkeyIndex[t.id]}</span>
+                        ) : (
+                          <>
+                            {isActive && <span className="term-state">active</span>}
+                            {!isActive && isBusy && <span className="term-running">running</span>}
+                          </>
+                        )}
                         <button
                           className="term-close"
                           title="Close terminal"

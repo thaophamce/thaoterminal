@@ -598,6 +598,16 @@ html, body, #root {
   font-size: 9.5px;
   opacity: 0.6;
 }
+.term-hotkey {
+  font-size: 10.5px;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--accent);
+  background: var(--hover);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-weight: 600;
+}
 .term-close {
   background: none;
   border: none;
@@ -710,6 +720,42 @@ html, body, #root {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+}
+
+/* Update banner (shown when a newer release exists) */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 16px;
+  border: none;
+  border-bottom: 1px solid rgba(52, 211, 153, 0.3);
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.16), rgba(52, 211, 153, 0.05));
+  color: #6ee7b7;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.update-banner:hover { background: rgba(52, 211, 153, 0.22); }
+.update-banner b { color: #fff; font-weight: 700; }
+.ub-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 7px #34d399;
+  animation: dotpulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.ub-cta {
+  margin-left: auto;
+  border: 1px solid #34d399;
+  border-radius: 20px;
+  padding: 2px 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .ws-maintabs {
   display: flex;
