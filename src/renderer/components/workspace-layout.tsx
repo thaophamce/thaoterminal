@@ -247,8 +247,15 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     return () => clearInterval(iv)
   }, [])
 
+  const [updating, setUpdating] = useState(false)
   const openReleases = useCallback(() => {
     window.app.releasesUrl().then(u => window.app.openExternal(u)).catch(() => {})
+  }, [])
+
+  // Self-update via the curl installer, then the app relaunches itself
+  const doUpdate = useCallback(() => {
+    setUpdating(true)
+    window.app.runUpdate().catch(() => setUpdating(false))
   }, [])
 
   // --- keyboard shortcuts ---
@@ -358,6 +365,8 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         version={version}
         update={update}
         onOpenReleases={openReleases}
+        onUpdate={doUpdate}
+        updating={updating}
         showHotkeys={showHotkeys}
         hotkeyIndex={hotkeyIndex}
       />
@@ -367,10 +376,12 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
 
       <div className="ws-main">
         {update?.hasUpdate && (
-          <button className="update-banner" onClick={openReleases}>
+          <button className="update-banner" onClick={doUpdate} disabled={updating}>
             <span className="ub-dot" />
-            New version <b>v{update.latest}</b> available — click to update
-            <span className="ub-cta">Update →</span>
+            {updating
+              ? <>Updating to <b>v{update.latest}</b>… app will relaunch</>
+              : <>New version <b>v{update.latest}</b> available — click to update</>}
+            <span className="ub-cta">{updating ? 'Updating…' : 'Update →'}</span>
           </button>
         )}
 

@@ -6,6 +6,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electro
 import { join } from 'path'
 import os from 'os'
 import fs from 'fs'
+import { spawn } from 'child_process'
 import { PtyManager } from './pty-manager'
 
 const ptyManager = new PtyManager()
@@ -118,6 +119,24 @@ ipcMain.handle('app:checkUpdate', async () => {
 })
 
 ipcMain.handle('app:releasesUrl', () => `https://github.com/${REPO}/releases`)
+
+// Self-update via the curl installer: spawn a detached updater that waits for
+// this app to quit, then downloads + installs the latest release and relaunches.
+ipcMain.handle('app:runUpdate', () => {
+  const pid = process.pid
+  const script =
+    `for i in $(seq 1 40); do kill -0 ${pid} 2>/dev/null || break; sleep 0.5; done; ` +
+    `curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash`
+  try {
+    const child = spawn('/bin/bash', ['-lc', script], { detached: true, stdio: 'ignore' })
+    child.unref()
+  } catch {
+    return false
+  }
+  // Quit (gracefully) so the running bundle can be replaced and relaunched
+  setTimeout(() => app.quit(), 300)
+  return true
+})
 
 // --- Workspace IPC ---
 

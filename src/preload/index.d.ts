@@ -21,6 +21,7 @@ export interface AppAPI {
   getVersion: () => Promise<string>
   checkUpdate: () => Promise<UpdateInfo>
   releasesUrl: () => Promise<string>
+  runUpdate: () => Promise<boolean>
   openExternal: (url: string) => Promise<void>
 }
 
