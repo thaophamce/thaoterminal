@@ -119,7 +119,8 @@ export function WorkspaceSidebar({
                 <button className="chev" onClick={() => onToggle(ws.id)}>▾</button>
                 <span className="folder-ic">📁</span>
                 <span className="folder-path" title={ws.path}>
-                  <span className="root">{parent}</span>{base}
+                  <span className="fp-parent">{parent}</span>
+                  <span className="fp-base">{base}</span>
                 </span>
                 {ws.branch && <span className="folder-branch">⎇ {ws.branch}</span>}
                 {count > 0 && <span className="folder-badge">{count} {count === 1 ? 'terminal' : 'terminals'}</span>}

@@ -540,14 +540,21 @@ html, body, #root {
 .ws-folder.collapsed .chev { transform: rotate(-90deg); }
 .folder-ic { font-size: 12px; }
 .folder-path {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
   font-family: "JetBrains Mono", "SF Mono", monospace;
   font-size: 12px;
+}
+/* Parent dir truncates (left); the folder name always stays fully visible */
+.fp-parent {
+  opacity: 0.5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px;
+  min-width: 0;
 }
-.folder-path .root { opacity: 0.5; }
+.fp-base { flex-shrink: 0; white-space: nowrap; }
 .folder-branch {
   font-size: 10.5px;
   color: var(--accent);
