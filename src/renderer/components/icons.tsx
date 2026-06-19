@@ -20,14 +20,16 @@ export function TerminalIcon({ size = 14, className }: IconProps) {
 
 /** Claude — Anthropic-style radiant sunburst */
 export function ClaudeIcon({ size = 14, className }: IconProps) {
+  // Anthropic-style sunburst: 12 rays alternating long/short, full opacity
   const rays = Array.from({ length: 12 }, (_, i) => {
     const a = (i * Math.PI) / 6
+    const inner = 2.4
+    const outer = i % 2 === 0 ? 9.6 : 6.9
     return (
       <line key={i}
-        x1={(12 + Math.cos(a) * 3).toFixed(2)} y1={(12 + Math.sin(a) * 3).toFixed(2)}
-        x2={(12 + Math.cos(a) * 9.5).toFixed(2)} y2={(12 + Math.sin(a) * 9.5).toFixed(2)}
-        stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-        opacity={i % 2 === 0 ? 1 : 0.55}
+        x1={(12 + Math.cos(a) * inner).toFixed(2)} y1={(12 + Math.sin(a) * inner).toFixed(2)}
+        x2={(12 + Math.cos(a) * outer).toFixed(2)} y2={(12 + Math.sin(a) * outer).toFixed(2)}
+        stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"
       />
     )
   })

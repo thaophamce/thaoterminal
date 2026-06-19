@@ -569,40 +569,33 @@ html, body, #root {
   padding: 1px 8px;
   white-space: nowrap;
 }
-.folder-add, .folder-rm {
-  margin-left: auto;
-  width: 22px;
-  height: 22px;
+/* All folder-header icon buttons share one clean, transparent look */
+.folder-add, .folder-claude, .folder-codex, .folder-pi, .folder-rm {
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
-  border-radius: 6px;
-  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  border: none;
   background: transparent;
   color: inherit;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0.75;
+  padding: 0;
 }
-.folder-rm {
-  margin-left: 0;
-  opacity: 0;
-  font-size: 11px;
+.folder-add:hover, .folder-claude:hover, .folder-codex:hover, .folder-pi:hover, .folder-rm:hover {
+  background: var(--hover);
+  opacity: 1;
 }
-.folder-head:hover .folder-rm { opacity: 0.6; }
-.folder-add, .folder-claude, .folder-codex, .folder-rm {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.folder-add, .folder-claude, .folder-codex, .folder-pi, .folder-rm {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.folder-add { color: var(--accent); margin-left: 0; }
 .folder-claude { color: #d97757; margin-left: auto; }
-.folder-codex { color: #10a37f; margin-left: 0; }
-.folder-pi { color: #a78bfa; margin-left: 0; }
-.folder-add:hover, .folder-rm:hover, .folder-claude:hover, .folder-codex:hover, .folder-pi:hover { background: var(--hover); opacity: 1; }
+.folder-codex { color: #10a37f; }
+.folder-pi { color: #a78bfa; }
+.folder-add { color: var(--accent); }
+.folder-rm { opacity: 0; font-size: 12px; }
+.folder-head:hover .folder-rm { opacity: 0.6; }
 
 .term-kind-ic { display: inline-flex; align-items: center; flex-shrink: 0; }
 .term-kind-ic.claude { color: #d97757; }
