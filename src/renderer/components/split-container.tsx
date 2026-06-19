@@ -118,8 +118,8 @@ export function SplitContainer({ onImagePaste }: Props) {
     const handler = (e: KeyboardEvent) => {
       const isMeta = e.metaKey || e.ctrlKey
 
-      // Cmd+T: new tab
-      if (isMeta && e.key === 't') {
+      // Cmd+Shift+T: new tab
+      if (isMeta && e.shiftKey && (e.key === 'T' || e.key === 't')) {
         e.preventDefault()
         addTab()
       }

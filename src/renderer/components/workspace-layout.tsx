@@ -474,7 +474,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
             <>
               <button
                 className="ws-tab-add"
-                title="New terminal in this folder (⌘T / ⌘N)"
+                title="New terminal in this folder (⌘⇧T / ⌘N)"
                 onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}
               >+</button>
               <button
@@ -504,7 +504,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
             {activeWorkspace.branch && <span className="tb-branch">⎇ {activeWorkspace.branch}</span>}
             <div className="tb-right">
               <span className="tb-shell">● {shellName}</span>
-              <button className="tb-ic" title="New terminal in this folder (⌘T / ⌘N)" onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}>+</button>
+              <button className="tb-ic" title="New terminal in this folder (⌘⇧T / ⌘N)" onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}>+</button>
               <button className="tb-ic" title="Close this terminal (⌘W)" onClick={() => removeTerminal(activeTerm.id)}>🗑</button>
             </div>
           </div>

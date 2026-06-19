@@ -9,7 +9,7 @@ export interface Binding {
 }
 
 export const DEFAULT_BINDINGS: Binding[] = [
-  { id: 'newTerminal', label: 'New terminal', combo: 'Cmd+T' },
+  { id: 'newTerminal', label: 'New terminal', combo: 'Cmd+Shift+T' },
   { id: 'newClaude', label: 'New Claude session', combo: 'Cmd+Shift+C' },
   { id: 'newCodex', label: 'New Codex session', combo: 'Cmd+Shift+X' },
   { id: 'newPi', label: 'New PI session', combo: 'Cmd+Shift+P' },
