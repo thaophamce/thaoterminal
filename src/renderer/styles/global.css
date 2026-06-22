@@ -1056,6 +1056,76 @@ html, body, #root {
 }
 .kb-reset:hover { border-color: var(--accent); color: var(--accent); }
 
+/* Agent enable/disable toggles */
+.kb-section-head {
+  display: flex;
+  align-items: center;
+  padding: 12px 18px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+.kb-section-head .kb-reset {
+  margin-left: auto;
+  padding: 3px 9px;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.kb-agents {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 2px 14px 6px;
+}
+.kb-agent {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--bg, #0e0e14);
+  border: 1px solid var(--border2, #2a2f3e);
+  border-radius: 9px;
+  padding: 9px 11px;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  transition: border-color 0.12s, opacity 0.12s;
+}
+.kb-agent.off { opacity: 0.45; }
+.kb-agent .kb-agent-ic { display: flex; opacity: 0.6; }
+.kb-agent.on.claude { border-color: rgba(217, 119, 87, 0.5); }
+.kb-agent.on.codex { border-color: rgba(16, 163, 127, 0.5); }
+.kb-agent.on.pi { border-color: rgba(167, 139, 250, 0.5); }
+.kb-agent.on.tawx { border-color: rgba(34, 211, 238, 0.5); }
+.kb-agent.on.claude .kb-agent-ic { color: #d97757; opacity: 1; }
+.kb-agent.on.codex .kb-agent-ic { color: #10a37f; opacity: 1; }
+.kb-agent.on.pi .kb-agent-ic { color: #a78bfa; opacity: 1; }
+.kb-agent.on.tawx .kb-agent-ic { color: #22d3ee; opacity: 1; }
+.kb-agent-name { flex: 1; text-align: left; font-size: 13px; }
+.kb-switch {
+  width: 32px;
+  height: 18px;
+  border-radius: 20px;
+  background: var(--border2, #2a2f3e);
+  position: relative;
+  flex: none;
+  transition: background 0.14s;
+}
+.kb-switch.on { background: var(--accent); }
+.kb-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.14s;
+}
+.kb-switch.on .kb-knob { transform: translateX(14px); }
+
 /* Image overlay */
 .image-overlay {
   position: fixed;

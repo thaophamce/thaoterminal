@@ -4,6 +4,7 @@
  */
 import { useState } from 'react'
 import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, TawxIcon } from './icons'
+import type { AgentState } from '../lib/agents'
 import type { UsageSnapshot, UpdateInfo } from '../../preload/index.d'
 
 export type TermKind = 'shell' | 'claude' | 'codex' | 'pi' | 'tawx'
@@ -41,6 +42,7 @@ interface Props {
   onAddCodex: (workspaceId: string) => void
   onAddPi: (workspaceId: string) => void
   onAddTawx: (workspaceId: string) => void
+  agents: AgentState
   onSelectTerminal: (id: string) => void
   onCloseTerminal: (id: string) => void
   onRenameTerminal: (id: string, name: string) => void
@@ -71,7 +73,7 @@ function splitPath(p: string, home: string): { parent: string; base: string } {
 export function WorkspaceSidebar({
   workspaces, activeId, busy, home, query, onQuery,
   onAddFolder, onRemoveFolder, onToggle, onAddTerminal, onAddClaude, onAddCodex, onAddPi, onAddTawx,
-  onSelectTerminal, onCloseTerminal, onRenameTerminal, usage, version, update, onOpenReleases,
+  agents, onSelectTerminal, onCloseTerminal, onRenameTerminal, usage, version, update, onOpenReleases,
   onUpdate, updating, hotkeyIndex
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -126,10 +128,10 @@ export function WorkspaceSidebar({
                 </span>
                 {ws.branch && <span className="folder-branch">⎇ {ws.branch}</span>}
                 {count > 0 && <span className="folder-badge">{count} {count === 1 ? 'terminal' : 'terminals'}</span>}
-                <button className="folder-claude" title="New Claude Code session here" onClick={() => onAddClaude(ws.id)}><ClaudeIcon size={13} /></button>
-                <button className="folder-codex" title="New Codex session here" onClick={() => onAddCodex(ws.id)}><CodexIcon size={13} /></button>
-                <button className="folder-pi" title="New PI session here" onClick={() => onAddPi(ws.id)}><PiIcon size={13} /></button>
-                <button className="folder-tawx" title="New tawx session here" onClick={() => onAddTawx(ws.id)}><TawxIcon size={13} /></button>
+                {agents.claude && <button className="folder-claude" title="New Claude Code session here" onClick={() => onAddClaude(ws.id)}><ClaudeIcon size={13} /></button>}
+                {agents.codex && <button className="folder-codex" title="New Codex session here" onClick={() => onAddCodex(ws.id)}><CodexIcon size={13} /></button>}
+                {agents.pi && <button className="folder-pi" title="New PI session here" onClick={() => onAddPi(ws.id)}><PiIcon size={13} /></button>}
+                {agents.tawx && <button className="folder-tawx" title="New tawx session here" onClick={() => onAddTawx(ws.id)}><TawxIcon size={13} /></button>}
                 <button className="folder-add" title="New terminal here" onClick={() => onAddTerminal(ws.id)}>+</button>
                 <button className="folder-rm" title="Remove folder" onClick={() => onRemoveFolder(ws.id)}>🗑</button>
               </div>
@@ -189,18 +191,18 @@ export function WorkspaceSidebar({
                       <button className="terms-empty" onClick={() => onAddTerminal(ws.id)}>
                         ⊕ Terminal
                       </button>
-                      <button className="terms-empty claude" onClick={() => onAddClaude(ws.id)}>
+                      {agents.claude && <button className="terms-empty claude" onClick={() => onAddClaude(ws.id)}>
                         <ClaudeIcon size={12} /> Claude
-                      </button>
-                      <button className="terms-empty codex" onClick={() => onAddCodex(ws.id)}>
+                      </button>}
+                      {agents.codex && <button className="terms-empty codex" onClick={() => onAddCodex(ws.id)}>
                         <CodexIcon size={12} /> Codex
-                      </button>
-                      <button className="terms-empty pi" onClick={() => onAddPi(ws.id)}>
+                      </button>}
+                      {agents.pi && <button className="terms-empty pi" onClick={() => onAddPi(ws.id)}>
                         <PiIcon size={12} /> PI
-                      </button>
-                      <button className="terms-empty tawx" onClick={() => onAddTawx(ws.id)}>
+                      </button>}
+                      {agents.tawx && <button className="terms-empty tawx" onClick={() => onAddTawx(ws.id)}>
                         <TawxIcon size={12} /> tawx
-                      </button>
+                      </button>}
                     </div>
                   )}
                 </div>

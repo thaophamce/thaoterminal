@@ -4,15 +4,27 @@
  */
 import { useState, useEffect } from 'react'
 import { Binding, eventToCombo, formatCombo } from '../lib/keybindings'
+import { AGENTS, AgentKind, AgentState } from '../lib/agents'
+import { ClaudeIcon, CodexIcon, PiIcon, TawxIcon } from './icons'
+
+const AGENT_ICONS: Record<AgentKind, (p: { size?: number }) => JSX.Element> = {
+  claude: ClaudeIcon,
+  codex: CodexIcon,
+  pi: PiIcon,
+  tawx: TawxIcon
+}
 
 interface Props {
   bindings: Binding[]
   onChange: (id: string, combo: string) => void
   onReset: () => void
+  agents: AgentState
+  onToggleAgent: (id: AgentKind) => void
+  onResetAgents: () => void
   onClose: () => void
 }
 
-export function KeybindingsModal({ bindings, onChange, onReset, onClose }: Props) {
+export function KeybindingsModal({ bindings, onChange, onReset, agents, onToggleAgent, onResetAgents, onClose }: Props) {
   const [capturingId, setCapturingId] = useState<string | null>(null)
 
   // While capturing, the next key combo becomes the binding
@@ -39,10 +51,36 @@ export function KeybindingsModal({ bindings, onChange, onReset, onClose }: Props
     <div className="kb-overlay" onClick={onClose}>
       <div className="kb-modal" onClick={e => e.stopPropagation()}>
         <div className="kb-head">
-          <h2>Keyboard Shortcuts</h2>
+          <h2>Settings</h2>
           <button className="kb-close" onClick={onClose} title="Close (Esc)">×</button>
         </div>
 
+        <div className="kb-section-head">
+          <span>Agents</span>
+          <button className="kb-reset" onClick={onResetAgents}>Enable all</button>
+        </div>
+        <div className="kb-agents">
+          {AGENTS.map(a => {
+            const Icon = AGENT_ICONS[a.id]
+            const on = agents[a.id]
+            return (
+              <button
+                key={a.id}
+                className={`kb-agent ${a.id} ${on ? 'on' : 'off'}`}
+                onClick={() => onToggleAgent(a.id)}
+                title={on ? `Disable ${a.label}` : `Enable ${a.label}`}
+              >
+                <span className="kb-agent-ic"><Icon size={14} /></span>
+                <span className="kb-agent-name">{a.label}</span>
+                <span className={`kb-switch ${on ? 'on' : 'off'}`}><span className="kb-knob" /></span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="kb-section-head">
+          <span>Keyboard Shortcuts</span>
+        </div>
         <div className="kb-list">
           {bindings.map(b => (
             <div className="kb-row" key={b.id}>

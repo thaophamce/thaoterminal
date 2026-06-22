@@ -11,6 +11,7 @@ import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, TawxIcon } from './icons'
 import type { UsageSnapshot, UpdateInfo } from '../../preload/index.d'
 import { KeybindingsModal } from './keybindings-modal'
 import { Binding, loadBindings, saveBindings, eventToCombo } from '../lib/keybindings'
+import { AgentKind, AgentState, loadEnabledAgents, saveEnabledAgents, resetEnabledAgents } from '../lib/agents'
 
 let termCounter = 0
 const nextTermId = () => `term-${++termCounter}`
@@ -40,6 +41,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   const [update, setUpdate] = useState<UpdateInfo | null>(null)
   const [sidebarHidden, setSidebarHidden] = useState(false)
   const [bindings, setBindings] = useState<Binding[]>(() => loadBindings())
+  const [agents, setAgents] = useState<AgentState>(() => loadEnabledAgents())
   const [showKeybindings, setShowKeybindings] = useState(false)
   const loadedRef = useRef(false)
   const resizingRef = useRef(false)
@@ -314,10 +316,10 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
       const ws = activeWorkspace || workspaces[0]
       switch (actionId) {
         case 'newTerminal': if (ws) spawnTerminal(ws.id, ws.path, 'shell'); break
-        case 'newClaude': if (ws) spawnTerminal(ws.id, ws.path, 'claude'); break
-        case 'newCodex': if (ws) spawnTerminal(ws.id, ws.path, 'codex'); break
-        case 'newPi': if (ws) spawnTerminal(ws.id, ws.path, 'pi'); break
-        case 'newTawx': if (ws) spawnTerminal(ws.id, ws.path, 'tawx'); break
+        case 'newClaude': if (ws && agents.claude) spawnTerminal(ws.id, ws.path, 'claude'); break
+        case 'newCodex': if (ws && agents.codex) spawnTerminal(ws.id, ws.path, 'codex'); break
+        case 'newPi': if (ws && agents.pi) spawnTerminal(ws.id, ws.path, 'pi'); break
+        case 'newTawx': if (ws && agents.tawx) spawnTerminal(ws.id, ws.path, 'tawx'); break
         case 'closeTerminal': if (activeId) removeTerminal(activeId); break
         case 'toggleSidebar': setSidebarHidden(h => !h); break
       }
@@ -343,7 +345,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [bindings, activeWorkspace, workspaces, activeId, spawnTerminal, removeTerminal])
+  }, [bindings, agents, activeWorkspace, workspaces, activeId, spawnTerminal, removeTerminal])
 
   const rebind = useCallback((id: string, combo: string) => {
     setBindings(prev => {
@@ -356,6 +358,19 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   const resetBindings = useCallback(() => {
     localStorage.removeItem('taw.keybindings')
     setBindings(loadBindings())
+  }, [])
+
+  const toggleAgent = useCallback((id: AgentKind) => {
+    setAgents(prev => {
+      const next = { ...prev, [id]: !prev[id] }
+      saveEnabledAgents(next)
+      return next
+    })
+  }, [])
+
+  const resetAgents = useCallback(() => {
+    resetEnabledAgents()
+    setAgents(loadEnabledAgents())
   }, [])
 
   // --- sidebar resize (drag handle) ---
@@ -407,6 +422,9 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
           bindings={bindings}
           onChange={rebind}
           onReset={resetBindings}
+          agents={agents}
+          onToggleAgent={toggleAgent}
+          onResetAgents={resetAgents}
           onClose={() => setShowKeybindings(false)}
         />
       )}
@@ -448,6 +466,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
           const ws = workspaces.find(w => w.id === wsId)
           if (ws) spawnTerminal(ws.id, ws.path, 'tawx')
         }}
+        agents={agents}
         onSelectTerminal={setActiveId}
         onCloseTerminal={removeTerminal}
         onRenameTerminal={renameTerminal}
@@ -497,26 +516,26 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
                 title="New terminal in this folder (⌘⇧T / ⌘N)"
                 onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}
               >+</button>
-              <button
+              {agents.claude && <button
                 className="ws-tab-add claude"
                 title="New Claude Code session"
                 onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path, 'claude')}
-              ><ClaudeIcon size={14} /></button>
-              <button
+              ><ClaudeIcon size={14} /></button>}
+              {agents.codex && <button
                 className="ws-tab-add codex"
                 title="New Codex session"
                 onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path, 'codex')}
-              ><CodexIcon size={14} /></button>
-              <button
+              ><CodexIcon size={14} /></button>}
+              {agents.pi && <button
                 className="ws-tab-add pi"
                 title="New PI session"
                 onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path, 'pi')}
-              ><PiIcon size={14} /></button>
-              <button
+              ><PiIcon size={14} /></button>}
+              {agents.tawx && <button
                 className="ws-tab-add tawx"
                 title="New tawx session"
                 onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path, 'tawx')}
-              ><TawxIcon size={14} /></button>
+              ><TawxIcon size={14} /></button>}
             </>
           )}
         </div>
