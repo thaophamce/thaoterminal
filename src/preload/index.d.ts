@@ -30,6 +30,10 @@ export interface PersistedTerm {
   cwd: string
   kind?: 'shell' | 'claude' | 'codex' | 'pi' | 'tawx'
   claudeSessionId?: string
+  /** Free-form sticky note pinned to this terminal */
+  note?: string
+  /** Whether the sticky note panel is shown */
+  noteOpen?: boolean
 }
 
 export interface PersistedWorkspace {

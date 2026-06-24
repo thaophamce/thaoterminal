@@ -17,6 +17,10 @@ export interface Term {
   sessionId?: string
   /** Command auto-run on spawn (e.g. `claude --session-id <id>`) */
   initialCommand?: string
+  /** Free-form sticky note pinned to this terminal */
+  note?: string
+  /** Whether the sticky note panel is shown */
+  noteOpen?: boolean
 }
 
 export interface Workspace {
@@ -175,6 +179,7 @@ export function WorkspaceSidebar({
                             onDoubleClick={(e) => { e.stopPropagation(); startRename(t) }}
                           >{t.name}</span>
                         )}
+                        {t.note?.trim() && <span className="term-note-dot" title={t.note}>📝</span>}
                         {isActive && <span className="term-state">active</span>}
                         {!isActive && isBusy && <span className="term-running">running</span>}
                         {hotkeyIndex[t.id] && <span className="term-num" title={`Jump: ⌘${hotkeyIndex[t.id]}`}>⌘{hotkeyIndex[t.id]}</span>}

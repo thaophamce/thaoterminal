@@ -136,6 +136,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
           terminals: (w.terminals || []).map(t => {
             const id = nextTermId()
             const cwd = t.cwd || w.path
+            const note = { note: t.note, noteOpen: t.noteOpen }
             if (t.kind === 'claude' && t.claudeSessionId) {
               // Resume the saved conversation by id. No `|| --session-id`
               // fallback: that reused the id and errored "already in use" once
@@ -144,14 +145,14 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
               const sid = t.claudeSessionId
               return {
                 id, name: t.name, cwd, kind: 'claude' as const,
-                sessionId: sid,
+                sessionId: sid, ...note,
                 initialCommand: `claude --resume ${sid} --dangerously-skip-permissions${MOUSE_RESET}`
               }
             }
             if (t.kind === 'codex') {
               // Codex has no fixed id; resume the most recent session
               return {
-                id, name: t.name, cwd, kind: 'codex' as const,
+                id, name: t.name, cwd, kind: 'codex' as const, ...note,
                 initialCommand: `codex resume --last${MOUSE_RESET}`
               }
             }
@@ -161,18 +162,18 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
               const dir = `~/.taw-terminal/pi/${sid}`
               return {
                 id, name: t.name, cwd, kind: 'pi' as const,
-                sessionId: sid,
+                sessionId: sid, ...note,
                 initialCommand: `mkdir -p ${dir} && pi --session-dir ${dir} --continue${MOUSE_RESET}`
               }
             }
             if (t.kind === 'tawx') {
               // tawx has no fixed id; resume the most recent session (like Codex)
               return {
-                id, name: t.name, cwd, kind: 'tawx' as const,
+                id, name: t.name, cwd, kind: 'tawx' as const, ...note,
                 initialCommand: `tawx resume${MOUSE_RESET}`
               }
             }
-            return { id, name: t.name, cwd, kind: 'shell' as const }
+            return { id, name: t.name, cwd, kind: 'shell' as const, ...note }
           })
         }))
         const all = ws.flatMap(w => w.terminals.map(t => ({ t, path: w.path })))
@@ -210,7 +211,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
       workspaces: workspaces.map(ws => ({
         path: ws.path,
         collapsed: ws.collapsed,
-        terminals: ws.terminals.map(t => ({ name: t.name, cwd: t.cwd, kind: t.kind, claudeSessionId: t.sessionId }))
+        terminals: ws.terminals.map(t => ({ name: t.name, cwd: t.cwd, kind: t.kind, claudeSessionId: t.sessionId, note: t.note, noteOpen: t.noteOpen }))
       }))
     })
   }, [workspaces, activeId])
@@ -275,6 +276,21 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     setWorkspaces(prev => prev.map(w => ({
       ...w,
       terminals: w.terminals.map(t => (t.id === termId ? { ...t, name } : t))
+    })))
+  }, [])
+
+  // --- sticky note: edit content / toggle the note panel for a terminal ---
+  const updateNote = useCallback((termId: string, note: string) => {
+    setWorkspaces(prev => prev.map(w => ({
+      ...w,
+      terminals: w.terminals.map(t => (t.id === termId ? { ...t, note } : t))
+    })))
+  }, [])
+
+  const toggleNote = useCallback((termId: string) => {
+    setWorkspaces(prev => prev.map(w => ({
+      ...w,
+      terminals: w.terminals.map(t => (t.id === termId ? { ...t, noteOpen: !t.noteOpen } : t))
     })))
   }, [])
 
@@ -548,6 +564,11 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
             {activeWorkspace.branch && <span className="tb-branch">⎇ {activeWorkspace.branch}</span>}
             <div className="tb-right">
               <span className="tb-shell">● {shellName}</span>
+              <button
+                className={`tb-ic ${activeTerm.noteOpen ? 'active' : ''}`}
+                title={activeTerm.noteOpen ? 'Hide sticky note' : 'Sticky note for this terminal'}
+                onClick={() => toggleNote(activeTerm.id)}
+              >📝</button>
               <button className="tb-ic" title="New terminal in this folder (⌘⇧T / ⌘N)" onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}>+</button>
               <button className="tb-ic" title="Close this terminal (⌘W)" onClick={() => removeTerminal(activeTerm.id)}>🗑</button>
             </div>
@@ -566,6 +587,20 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
               onImagePaste={onImagePaste}
             />
           ))}
+          {activeTerm?.noteOpen && (
+            <div className="sticky-note">
+              <div className="sticky-note-head">
+                <span className="sn-title">📝 Note · {activeTerm.name}</span>
+                <button className="sn-close" title="Hide note" onClick={() => toggleNote(activeTerm.id)}>×</button>
+              </div>
+              <textarea
+                className="sticky-note-body"
+                placeholder="Jot something for this terminal…"
+                value={activeTerm.note ?? ''}
+                onChange={(e) => updateNote(activeTerm.id, e.target.value)}
+              />
+            </div>
+          )}
           {allTerminals.length === 0 && (
             <div className="ws-empty">
               <div className="ws-empty-card">
