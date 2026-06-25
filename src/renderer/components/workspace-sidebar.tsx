@@ -55,7 +55,6 @@ interface Props {
   update: UpdateInfo | null
   onOpenReleases: () => void
   onUpdate: () => void
-  updating: boolean
   hotkeyIndex: Record<string, number>
 }
 
@@ -78,7 +77,7 @@ export function WorkspaceSidebar({
   workspaces, activeId, busy, home, query, onQuery,
   onAddFolder, onRemoveFolder, onToggle, onAddTerminal, onAddClaude, onAddCodex, onAddPi, onAddTawx,
   agents, onSelectTerminal, onCloseTerminal, onRenameTerminal, usage, version, update, onOpenReleases,
-  onUpdate, updating, hotkeyIndex
+  onUpdate, hotkeyIndex
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -256,8 +255,8 @@ export function WorkspaceSidebar({
           TawTerminal v{version || '—'}
         </span>
         {update?.hasUpdate ? (
-          <button className="v-update" onClick={onUpdate} disabled={updating} title="Download & install the latest version">
-            {updating ? 'updating…' : `↑ v${update.latest} — update`}
+          <button className="v-update" onClick={onUpdate} title="Show how to update to the latest version">
+            {`↑ v${update.latest} — update`}
           </button>
         ) : (
           <span className="v-ok">up to date</span>

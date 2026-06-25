@@ -1121,6 +1121,59 @@ html, body, #root {
 }
 .kb-reset:hover { border-color: var(--accent); color: var(--accent); }
 
+/* Update guide modal */
+.upd-modal { width: 540px; }
+.upd-body { padding: 16px 18px 6px; }
+.upd-steps {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.upd-steps code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  background: var(--bg, #0e0e14);
+  border: 1px solid var(--border2, #2a2f3e);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+.upd-cmd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg, #0e0e14);
+  border: 1px solid var(--border2, #2a2f3e);
+  border-radius: 9px;
+  padding: 11px 12px;
+}
+.upd-cmd code {
+  flex: 1;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12.5px;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+.upd-copy {
+  flex-shrink: 0;
+  background: rgba(52, 211, 153, 0.14);
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  color: #34d399;
+  border-radius: 7px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.upd-copy:hover { background: rgba(52, 211, 153, 0.24); }
+.upd-copy.done { color: #fff; }
+.upd-tip { margin: 12px 0 4px; font-size: 11.5px; opacity: 0.55; line-height: 1.5; }
+
 /* Agent enable/disable toggles */
 .kb-section-head {
   display: flex;

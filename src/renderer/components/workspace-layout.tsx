@@ -10,6 +10,7 @@ import { WorkspaceSidebar, Workspace, Term, TermKind } from './workspace-sidebar
 import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, TawxIcon } from './icons'
 import type { UsageSnapshot, UpdateInfo } from '../../preload/index.d'
 import { KeybindingsModal } from './keybindings-modal'
+import { UpdateModal } from './update-modal'
 import { Binding, loadBindings, saveBindings, eventToCombo } from '../lib/keybindings'
 import { AgentKind, AgentState, loadEnabledAgents, saveEnabledAgents, resetEnabledAgents } from '../lib/agents'
 
@@ -312,16 +313,14 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     return () => clearInterval(iv)
   }, [])
 
-  const [updating, setUpdating] = useState(false)
+  const [showUpdateGuide, setShowUpdateGuide] = useState(false)
   const openReleases = useCallback(() => {
     window.app.releasesUrl().then(u => window.app.openExternal(u)).catch(() => {})
   }, [])
 
-  // Self-update via the curl installer, then the app relaunches itself
-  const doUpdate = useCallback(() => {
-    setUpdating(true)
-    window.app.runUpdate().catch(() => setUpdating(false))
-  }, [])
+  // Show a guide: copy the install command, run it in a terminal, then quit +
+  // reopen TawTerminal. We don't self-update silently anymore.
+  const doUpdate = useCallback(() => setShowUpdateGuide(true), [])
 
   // --- keyboard shortcuts ---
   useEffect(() => {
@@ -445,6 +444,13 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         />
       )}
 
+      {showUpdateGuide && (
+        <UpdateModal
+          latest={update?.latest ?? null}
+          onClose={() => setShowUpdateGuide(false)}
+        />
+      )}
+
       {/* Floating restore pill when the sidebar is hidden */}
       {sidebarHidden && (
         <button className="sidebar-restore" onClick={() => setSidebarHidden(false)} title="Show sidebar (⌘B)">
@@ -491,7 +497,6 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         update={update}
         onOpenReleases={openReleases}
         onUpdate={doUpdate}
-        updating={updating}
         hotkeyIndex={hotkeyIndex}
       />}
 
@@ -500,12 +505,10 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
 
       <div className="ws-main">
         {update?.hasUpdate && (
-          <button className="update-banner" onClick={doUpdate} disabled={updating}>
+          <button className="update-banner" onClick={doUpdate}>
             <span className="ub-dot" />
-            {updating
-              ? <>Updating to <b>v{update.latest}</b>… app will relaunch</>
-              : <>New version <b>v{update.latest}</b> available — click to update</>}
-            <span className="ub-cta">{updating ? 'Updating…' : 'Update →'}</span>
+            New version <b>v{update.latest}</b> available — click to update
+            <span className="ub-cta">Update →</span>
           </button>
         )}
 
