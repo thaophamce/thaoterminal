@@ -401,6 +401,30 @@ html, body, #root {
 .rt-ic { font-size: 17px; line-height: 1; }
 .rt-kbd { font-size: 8px; font-family: "JetBrains Mono", monospace; opacity: 0.85; }
 
+/* Settings button (gear icon + caption) — bottom of the rail */
+.rail-settings {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 42px;
+  padding: 7px 0;
+  border-radius: 9px;
+  background: none;
+  border: 1px solid var(--border);
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.rail-settings:hover {
+  opacity: 1;
+  background: var(--hover);
+  color: var(--accent);
+}
+.rs-ic { display: flex; line-height: 0; }
+.rs-label { font-size: 8px; letter-spacing: 0.2px; opacity: 0.9; }
+
 /* Floating restore pill shown when the sidebar is hidden */
 .sidebar-restore {
   position: absolute;

@@ -62,6 +62,30 @@ export function TawxIcon({ size = 14, className }: IconProps) {
   )
 }
 
+/** Settings — gear: outer cog teeth + center hub */
+export function GearIcon({ size = 14, className }: IconProps) {
+  // 8 teeth radiating from the cog body
+  const teeth = Array.from({ length: 8 }, (_, i) => {
+    const a = (i * 45 * Math.PI) / 180
+    const inner = 7.4
+    const outer = 10.2
+    return (
+      <line key={i}
+        x1={(12 + Math.cos(a) * inner).toFixed(2)} y1={(12 + Math.sin(a) * inner).toFixed(2)}
+        x2={(12 + Math.cos(a) * outer).toFixed(2)} y2={(12 + Math.sin(a) * outer).toFixed(2)}
+        stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+    )
+  })
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {teeth}
+      <circle cx="12" cy="12" r="6.2" />
+      <circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
 /** Codex — OpenAI-style six-petal blossom */
 export function CodexIcon({ size = 14, className }: IconProps) {
   const petals = Array.from({ length: 6 }, (_, i) => {

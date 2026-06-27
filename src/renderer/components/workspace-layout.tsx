@@ -7,7 +7,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { TerminalInstance } from './terminal-instance'
 import { WorkspaceSidebar, Workspace, Term, TermKind } from './workspace-sidebar'
-import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, TawxIcon } from './icons'
+import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, TawxIcon, GearIcon } from './icons'
 import type { UsageSnapshot, UpdateInfo } from '../../preload/index.d'
 import { KeybindingsModal } from './keybindings-modal'
 import { UpdateModal } from './update-modal'
@@ -433,7 +433,10 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
           <span className="rt-kbd">⌘B</span>
         </button>
         <div className="rail-spacer" />
-        <button className="rail-ic" title="Keyboard shortcuts" onClick={() => setShowKeybindings(true)}>⚙</button>
+        <button className="rail-settings" title="Settings (agents & shortcuts)" onClick={() => setShowKeybindings(true)}>
+          <span className="rs-ic"><GearIcon size={22} /></span>
+          <span className="rs-label">Settings</span>
+        </button>
       </div>
 
       {showKeybindings && (
