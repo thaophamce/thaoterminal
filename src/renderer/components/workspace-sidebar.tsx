@@ -223,30 +223,38 @@ export function WorkspaceSidebar({
       {usage && (
         <div className="ws-usage" title="Token usage today (from ~/.claude, ~/.codex, ~/.pi and ~/.tawx)">
           <div className="ws-usage-head">Today's usage</div>
-          <div className="ws-usage-row">
-            <span className="u-ic claude"><ClaudeIcon size={12} /></span>
-            <span className="u-name">Claude</span>
-            <span className="u-tok">{fmtTok(usage.claude.tokens)}</span>
-            <span className="u-cost">~${usage.claude.cost.toFixed(2)}</span>
-          </div>
-          <div className="ws-usage-row">
-            <span className="u-ic codex"><CodexIcon size={12} /></span>
-            <span className="u-name">Codex</span>
-            <span className="u-tok">{fmtTok(usage.codex.tokens)}</span>
-            <span className="u-cost">~${usage.codex.cost.toFixed(2)}</span>
-          </div>
-          <div className="ws-usage-row">
-            <span className="u-ic pi"><PiIcon size={12} /></span>
-            <span className="u-name">PI</span>
-            <span className="u-tok">{fmtTok(usage.pi.tokens)}</span>
-            <span className="u-cost">~${usage.pi.cost.toFixed(2)}</span>
-          </div>
-          <div className="ws-usage-row">
-            <span className="u-ic tawx"><TawxIcon size={12} /></span>
-            <span className="u-name">tawx</span>
-            <span className="u-tok">{fmtTok(usage.tawx.tokens)}</span>
-            <span className="u-cost">~${usage.tawx.cost.toFixed(2)}</span>
-          </div>
+          {agents.claude && (
+            <div className="ws-usage-row">
+              <span className="u-ic claude"><ClaudeIcon size={12} /></span>
+              <span className="u-name">Claude</span>
+              <span className="u-tok">{fmtTok(usage.claude.tokens)}</span>
+              <span className="u-cost">~${usage.claude.cost.toFixed(2)}</span>
+            </div>
+          )}
+          {agents.codex && (
+            <div className="ws-usage-row">
+              <span className="u-ic codex"><CodexIcon size={12} /></span>
+              <span className="u-name">Codex</span>
+              <span className="u-tok">{fmtTok(usage.codex.tokens)}</span>
+              <span className="u-cost">~${usage.codex.cost.toFixed(2)}</span>
+            </div>
+          )}
+          {agents.pi && (
+            <div className="ws-usage-row">
+              <span className="u-ic pi"><PiIcon size={12} /></span>
+              <span className="u-name">PI</span>
+              <span className="u-tok">{fmtTok(usage.pi.tokens)}</span>
+              <span className="u-cost">~${usage.pi.cost.toFixed(2)}</span>
+            </div>
+          )}
+          {agents.tawx && (
+            <div className="ws-usage-row">
+              <span className="u-ic tawx"><TawxIcon size={12} /></span>
+              <span className="u-name">tawx</span>
+              <span className="u-tok">{fmtTok(usage.tawx.tokens)}</span>
+              <span className="u-cost">~${usage.tawx.cost.toFixed(2)}</span>
+            </div>
+          )}
         </div>
       )}
 

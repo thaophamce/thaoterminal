@@ -370,11 +370,6 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     })
   }, [])
 
-  const resetBindings = useCallback(() => {
-    localStorage.removeItem('taw.keybindings')
-    setBindings(loadBindings())
-  }, [])
-
   const toggleAgent = useCallback((id: AgentKind) => {
     setAgents(prev => {
       const next = { ...prev, [id]: !prev[id] }
@@ -384,6 +379,15 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   }, [])
 
   const resetAgents = useCallback(() => {
+    resetEnabledAgents()
+    setAgents(loadEnabledAgents())
+  }, [])
+
+  // "Reset to defaults" wipes the whole Settings panel: keyboard shortcuts AND
+  // agent toggles (re-enable all). Keeps the single footer button truthful.
+  const resetAll = useCallback(() => {
+    localStorage.removeItem('taw.keybindings')
+    setBindings(loadBindings())
     resetEnabledAgents()
     setAgents(loadEnabledAgents())
   }, [])
@@ -436,7 +440,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         <KeybindingsModal
           bindings={bindings}
           onChange={rebind}
-          onReset={resetBindings}
+          onReset={resetAll}
           agents={agents}
           onToggleAgent={toggleAgent}
           onResetAgents={resetAgents}
