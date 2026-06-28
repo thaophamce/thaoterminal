@@ -9,6 +9,8 @@ import fs from 'fs'
 import { spawn } from 'child_process'
 import { PtyManager } from './pty-manager'
 import { getLimits } from './limits'
+import { terminalRegistry } from './terminal-registry'
+import { RemoteServer, type RpcTable } from './remote-server'
 
 const ptyManager = new PtyManager()
 let mainWindow: BrowserWindow | null = null
@@ -47,17 +49,26 @@ function createWindow(): void {
 
 // --- IPC Handlers ---
 
-ipcMain.handle('terminal:create', (_, id: string, cwd?: string) => {
+interface TermMeta { name?: string; kind?: 'shell' | 'claude' | 'codex' | 'pi' | 'tawx'; workspacePath?: string }
+
+ipcMain.handle('terminal:create', (_, id: string, cwd?: string, meta?: TermMeta) => {
+  terminalRegistry.register({ id, cwd: cwd || '', name: meta?.name, kind: meta?.kind, workspacePath: meta?.workspacePath })
   ptyManager.create(id, (data) => {
+    // Fan out to the desktop window AND any remote clients (via the registry).
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('terminal:data', { id, data })
     }
+    terminalRegistry.pushData(id, data)
   }, cwd, 0, () => {
-    // Notify renderer that PTY exited so it stops writing to dead process
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('terminal:exit', { id })
     }
+    terminalRegistry.markExit(id)
   })
+})
+
+ipcMain.on('terminal:rename', (_, id: string, name: string) => {
+  terminalRegistry.rename(id, name)
 })
 
 ipcMain.on('terminal:write', (_, id: string, data: string) => {
@@ -70,6 +81,7 @@ ipcMain.on('terminal:resize', (_, id: string, cols: number, rows: number) => {
 
 ipcMain.handle('terminal:kill', (_, id: string) => {
   ptyManager.kill(id)
+  terminalRegistry.remove(id)
 })
 
 ipcMain.handle('terminal:getCwd', async (_, id: string) => {
@@ -104,7 +116,7 @@ function cmpSemver(a: string, b: string): number {
 }
 
 // Compare the running version against the latest GitHub release tag
-ipcMain.handle('app:checkUpdate', async () => {
+async function checkUpdate() {
   const current = app.getVersion()
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
@@ -117,7 +129,8 @@ ipcMain.handle('app:checkUpdate', async () => {
   } catch {
     return { current, latest: null, hasUpdate: false }
   }
-})
+}
+ipcMain.handle('app:checkUpdate', () => checkUpdate())
 
 ipcMain.handle('app:releasesUrl', () => `https://github.com/${REPO}/releases`)
 
@@ -170,24 +183,24 @@ const workspacesFile = () => join(app.getPath('userData'), 'workspaces.json')
 // Persisted session: folders + the terminals (name + cwd) that existed in each,
 // so the layout can be re-spawned on next launch. Running processes cannot be
 // restored — only the structure and working directories.
-ipcMain.handle('workspaces:load', () => {
+function loadWorkspaces(): unknown {
   try {
     return JSON.parse(fs.readFileSync(workspacesFile(), 'utf8'))
   } catch {
     return null
   }
-})
+}
 
-ipcMain.handle('workspaces:save', (_, state: unknown) => {
+function saveWorkspaces(state: unknown): void {
   try {
     fs.writeFileSync(workspacesFile(), JSON.stringify(state, null, 2))
   } catch {
     // best-effort persistence
   }
-})
+}
 
 // Resolve the current git branch for a folder (null if not a repo)
-ipcMain.handle('git:branch', async (_, cwd: string) => {
+async function gitBranchOf(cwd: string): Promise<string | null> {
   try {
     const { execFile } = await import('child_process')
     return await new Promise<string | null>((resolve) => {
@@ -198,7 +211,11 @@ ipcMain.handle('git:branch', async (_, cwd: string) => {
   } catch {
     return null
   }
-})
+}
+
+ipcMain.handle('workspaces:load', () => loadWorkspaces())
+ipcMain.handle('workspaces:save', (_, state: unknown) => saveWorkspaces(state))
+ipcMain.handle('git:branch', (_, cwd: string) => gitBranchOf(cwd))
 
 // --- Usage tracking (today's tokens/cost from Claude Code & Codex) ---
 
@@ -560,7 +577,7 @@ function tawxUsageToday(today: string): UsageStat {
   return total
 }
 
-ipcMain.handle('usage:get', () => {
+function usageSnapshot() {
   const now = new Date()
   // Group by LOCAL calendar date, matching `ccusage daily`'s default.
   const claudeToday = localDateKey(now)
@@ -574,12 +591,13 @@ ipcMain.handle('usage:get', () => {
   } catch {
     return { claude: emptyStat(), codex: emptyStat(), pi: emptyStat(), tawx: emptyStat() }
   }
-})
+}
+ipcMain.handle('usage:get', () => usageSnapshot())
 
 // Live rolling rate-limit usage (5h / weekly) for Claude + Codex. Unlike
 // usage:get (which sums local transcripts), this asks each provider's API.
 let limitsCache: { at: number; data: unknown } | null = null
-ipcMain.handle('limits:get', async () => {
+async function limitsSnapshot() {
   // De-dupe bursts: each call hits the network, so reuse a result < 15s old.
   if (limitsCache && Date.now() - limitsCache.at < 15000) return limitsCache.data
   try {
@@ -592,7 +610,62 @@ ipcMain.handle('limits:get', async () => {
       codex: { ok: false, session5h: null, weekly7d: null, error: 'Failed to read Codex limits.' }
     }
   }
-})
+}
+ipcMain.handle('limits:get', () => limitsSnapshot())
+
+// --- Remote (phone) access ---
+// Reuse the built renderer over HTTP + a WS bridge mirroring the IPC surface.
+const rpc: RpcTable = {
+  'terminal:create': (id: string, cwd?: string, meta?: TermMeta) => {
+    // A remote client attaching to an ALREADY-live session must not respawn it
+    // (that would kill the desktop's running Claude/Codex). Replay the buffer
+    // to the caller instead and leave the live PTY untouched.
+    if (terminalRegistry.has(id)) return { attached: true }
+    terminalRegistry.register({ id, cwd: cwd || '', name: meta?.name, kind: meta?.kind, workspacePath: meta?.workspacePath })
+    ptyManager.create(id, (data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('terminal:data', { id, data })
+      terminalRegistry.pushData(id, data)
+    }, cwd, 0, () => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('terminal:exit', { id })
+      terminalRegistry.markExit(id)
+    })
+    return { attached: false }
+  },
+  'terminal:write': (id: string, data: string) => { ptyManager.write(id, data) },
+  'terminal:resize': (id: string, cols: number, rows: number) => { ptyManager.resize(id, cols, rows) },
+  'terminal:kill': (id: string) => { ptyManager.kill(id); terminalRegistry.remove(id) },
+  'terminal:rename': (id: string, name: string) => { terminalRegistry.rename(id, name) },
+  'terminal:getCwd': (id: string) => ptyManager.getCwd(id),
+  'terminal:getShellName': () => ptyManager.getShellName(),
+  'session:list': () => terminalRegistry.list(),
+  'session:buffer': (id: string) => terminalRegistry.buffer(id),
+  'app:getTheme': () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
+  'app:getHome': () => os.homedir(),
+  'app:getVersion': () => app.getVersion(),
+  'app:checkUpdate': () => checkUpdate(),
+  'app:releasesUrl': () => `https://github.com/${REPO}/releases`,
+  'app:openExternal': (url: string) => { shell.openExternal(url) },
+  'app:runUpdate': () => false, // never let a remote client trigger a self-update
+  'workspace:openFolder': () => null, // no native folder picker on a phone
+  'workspaces:load': () => loadWorkspaces(),
+  'workspaces:save': (state: unknown) => saveWorkspaces(state),
+  'git:branch': (cwd: string) => gitBranchOf(cwd),
+  'usage:get': () => usageSnapshot(),
+  'limits:get': () => limitsSnapshot()
+}
+
+let remoteServer: RemoteServer | null = null
+function getRemoteServer(): RemoteServer {
+  if (!remoteServer) {
+    // __dirname is out/main in the built app, so ../renderer is the bundled SPA.
+    remoteServer = new RemoteServer(join(__dirname, '../renderer'), rpc)
+  }
+  return remoteServer
+}
+
+ipcMain.handle('remote:status', () => getRemoteServer().status())
+ipcMain.handle('remote:start', (_, opts?: { tunnel?: boolean }) => getRemoteServer().start(opts || {}))
+ipcMain.handle('remote:stop', async () => { await getRemoteServer().stop(); return getRemoteServer().status() })
 
 // --- App Lifecycle ---
 
@@ -608,6 +681,7 @@ app.on('before-quit', (e) => {
   if (isQuitting) return
   e.preventDefault()
   isQuitting = true
+  remoteServer?.stop().catch(() => {})
   ptyManager.gracefulShutdownAll().finally(() => app.quit())
 })
 

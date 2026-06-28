@@ -4,7 +4,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('terminal', {
-  create: (id: string, cwd?: string) => ipcRenderer.invoke('terminal:create', id, cwd),
+  create: (id: string, cwd?: string, meta?: { name?: string; kind?: string; workspacePath?: string }) =>
+    ipcRenderer.invoke('terminal:create', id, cwd, meta),
+  rename: (id: string, name: string) => ipcRenderer.send('terminal:rename', id, name),
   write: (id: string, data: string) => ipcRenderer.send('terminal:write', id, data),
   resize: (id: string, cols: number, rows: number) => ipcRenderer.send('terminal:resize', id, cols, rows),
   kill: (id: string) => ipcRenderer.invoke('terminal:kill', id),
@@ -45,4 +47,10 @@ contextBridge.exposeInMainWorld('usage', {
 
 contextBridge.exposeInMainWorld('limits', {
   get: () => ipcRenderer.invoke('limits:get')
+})
+
+contextBridge.exposeInMainWorld('remote', {
+  status: () => ipcRenderer.invoke('remote:status'),
+  start: (opts?: { tunnel?: boolean }) => ipcRenderer.invoke('remote:start', opts),
+  stop: () => ipcRenderer.invoke('remote:stop')
 })

@@ -1,5 +1,6 @@
 export interface TerminalAPI {
-  create: (id: string, cwd?: string) => Promise<void>
+  create: (id: string, cwd?: string, meta?: { name?: string; kind?: string; workspacePath?: string }) => Promise<void>
+  rename: (id: string, name: string) => void
   write: (id: string, data: string) => void
   resize: (id: string, cols: number, rows: number) => void
   kill: (id: string) => Promise<void>
@@ -102,6 +103,23 @@ export interface LimitsAPI {
   get: () => Promise<LimitsSnapshot>
 }
 
+export interface RemoteStatus {
+  running: boolean
+  port: number | null
+  token: string | null
+  lanUrl: string | null
+  tunnelUrl: string | null
+  url: string | null
+  qrDataUrl: string | null
+  tunnelError?: string | null
+}
+
+export interface RemoteAPI {
+  status: () => Promise<RemoteStatus>
+  start: (opts?: { tunnel?: boolean }) => Promise<RemoteStatus>
+  stop: () => Promise<RemoteStatus>
+}
+
 declare global {
   interface Window {
     terminal: TerminalAPI
@@ -109,5 +127,6 @@ declare global {
     workspace: WorkspaceAPI
     usage: UsageAPI
     limits: LimitsAPI
+    remote: RemoteAPI
   }
 }

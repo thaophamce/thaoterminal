@@ -1,0 +1,68 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  background: #1a1b26;
+  color: #c0caf5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+.m-app, .m-term-view { display: flex; flex-direction: column; height: 100%; }
+
+.m-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: max(env(safe-area-inset-top), 10px) 14px 10px;
+  background: #16161e;
+  border-bottom: 1px solid #292e42;
+  flex-shrink: 0;
+}
+.m-title { font-size: 15px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-conn { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+.m-conn.open { color: #9ece6a; }
+.m-conn.connecting { color: #e0af68; }
+.m-conn.closed { color: #f7768e; }
+.m-back {
+  background: none; border: none; color: #7aa2f7; font-size: 16px; padding: 4px 4px 4px 0; cursor: pointer;
+}
+
+.m-list { flex: 1; overflow-y: auto; padding: 8px 12px max(env(safe-area-inset-bottom), 16px); -webkit-overflow-scrolling: touch; }
+.m-empty { opacity: 0.5; text-align: center; padding: 40px 20px; font-size: 14px; }
+.m-group { margin-bottom: 14px; }
+.m-group-head {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; opacity: 0.45;
+  padding: 6px 4px; font-family: "JetBrains Mono", monospace;
+}
+.m-session {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; text-align: left;
+  padding: 14px 14px; margin-bottom: 8px;
+  background: #1f2335; border: 1px solid #292e42; border-radius: 12px;
+  color: inherit; font-size: 15px; cursor: pointer;
+}
+.m-session:active { background: #292e42; }
+.m-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-kind { font-size: 11px; opacity: 0.55; font-family: "JetBrains Mono", monospace; }
+.m-dot { width: 9px; height: 9px; border-radius: 50%; background: #565f89; flex-shrink: 0; }
+.kind-claude .m-dot { background: #d97757; }
+.kind-codex .m-dot { background: #10a37f; }
+.kind-pi .m-dot { background: #a78bfa; }
+.kind-tawx .m-dot { background: #22d3ee; }
+
+.m-term { flex: 1; min-height: 0; padding: 6px 6px 0; background: #1a1b26; overflow: hidden; }
+.m-term .xterm { height: 100%; }
+
+.m-keys {
+  display: flex; gap: 6px; padding: 8px 8px max(env(safe-area-inset-bottom), 8px);
+  background: #16161e; border-top: 1px solid #292e42; flex-shrink: 0; overflow-x: auto;
+}
+.m-keys button {
+  flex: 1; min-width: 44px; padding: 11px 0;
+  background: #24283b; border: 1px solid #292e42; border-radius: 9px;
+  color: #c0caf5; font-size: 15px; font-family: "JetBrains Mono", monospace; cursor: pointer;
+}
+.m-keys button:active { background: #3b4261; }

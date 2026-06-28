@@ -11,6 +11,7 @@ import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, TawxIcon, GearIcon } from 
 import type { UsageSnapshot, LimitsSnapshot, UpdateInfo } from '../../preload/index.d'
 import { KeybindingsModal } from './keybindings-modal'
 import { UpdateModal } from './update-modal'
+import { RemoteModal } from './remote-modal'
 import { Binding, loadBindings, saveBindings, eventToCombo } from '../lib/keybindings'
 import { AgentKind, AgentState, loadEnabledAgents, saveEnabledAgents, resetEnabledAgents } from '../lib/agents'
 
@@ -45,6 +46,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   const [bindings, setBindings] = useState<Binding[]>(() => loadBindings())
   const [agents, setAgents] = useState<AgentState>(() => loadEnabledAgents())
   const [showKeybindings, setShowKeybindings] = useState(false)
+  const [showRemote, setShowRemote] = useState(false)
   const loadedRef = useRef(false)
   const resizingRef = useRef(false)
   const busyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -279,6 +281,8 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
       ...w,
       terminals: w.terminals.map(t => (t.id === termId ? { ...t, name } : t))
     })))
+    // Keep the remote (phone) session list label in sync.
+    window.terminal.rename?.(termId, name)
   }, [])
 
   // --- sticky note: edit content / toggle the note panel for a terminal ---
@@ -443,6 +447,10 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
           <span className="rt-kbd">⌘B</span>
         </button>
         <div className="rail-spacer" />
+        <button className="rail-settings" title="Remote access (control from your phone)" onClick={() => setShowRemote(true)}>
+          <span className="rs-ic">📱</span>
+          <span className="rs-label">Remote</span>
+        </button>
         <button className="rail-settings" title="Settings (agents & shortcuts)" onClick={() => setShowKeybindings(true)}>
           <span className="rs-ic"><GearIcon size={22} /></span>
           <span className="rs-label">Settings</span>
@@ -467,6 +475,8 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
           onClose={() => setShowUpdateGuide(false)}
         />
       )}
+
+      {showRemote && <RemoteModal onClose={() => setShowRemote(false)} />}
 
       {/* Floating restore pill when the sidebar is hidden */}
       {sidebarHidden && (
@@ -604,6 +614,9 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
               id={t.id}
               isActive={t.id === activeId}
               cwd={t.cwd}
+              name={t.name}
+              kind={t.kind}
+              workspacePath={t.cwd}
               initialCommand={t.initialCommand}
               onImagePaste={onImagePaste}
             />

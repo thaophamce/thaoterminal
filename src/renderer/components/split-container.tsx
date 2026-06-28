@@ -177,6 +177,8 @@ export function SplitContainer({ onImagePaste }: Props) {
                   id={tab.id}
                   isActive={tab.id === pane.activeTabId}
                   cwd={tab.cwd}
+                  name={tab.name}
+                  workspacePath={tab.cwd}
                   onImagePaste={onImagePaste}
                 />
               ))}

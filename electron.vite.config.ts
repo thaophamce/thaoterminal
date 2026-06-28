@@ -1,5 +1,6 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import { resolve } from 'path'
 
 export default defineConfig({
   main: {
@@ -14,6 +15,15 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()]
   },
   renderer: {
-    plugins: [react()]
+    plugins: [react()],
+    build: {
+      rollupOptions: {
+        // Desktop SPA + the phone remote client are separate HTML entries.
+        input: {
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          mobile: resolve(__dirname, 'src/renderer/mobile.html')
+        }
+      }
+    }
   }
 })

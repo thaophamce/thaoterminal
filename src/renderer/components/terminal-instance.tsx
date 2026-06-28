@@ -13,12 +13,16 @@ interface Props {
   id: string
   isActive: boolean
   cwd?: string
+  /** Metadata surfaced to remote (phone) clients in the session list. */
+  name?: string
+  kind?: string
+  workspacePath?: string
   /** Command auto-run once after the shell is ready (e.g. `claude --resume <id>`) */
   initialCommand?: string
   onImagePaste?: (dataUrl: string) => void
 }
 
-export function TerminalInstance({ id, isActive, cwd, initialCommand, onImagePaste }: Props) {
+export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath, initialCommand, onImagePaste }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -62,8 +66,8 @@ export function TerminalInstance({ id, isActive, cwd, initialCommand, onImagePas
 
     terminal.open(container)
 
-    // Create PTY
-    window.terminal.create(id, cwd)
+    // Create PTY (metadata lets remote phone clients list this session)
+    window.terminal.create(id, cwd, { name, kind, workspacePath })
 
     // PTY data -> terminal
     const removeDataListener = window.terminal.onData(({ id: dataId, data }) => {
