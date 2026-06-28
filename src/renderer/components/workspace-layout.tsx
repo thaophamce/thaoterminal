@@ -349,6 +349,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         case 'newCodex': if (ws && agents.codex) spawnTerminal(ws.id, ws.path, 'codex'); break
         case 'newPi': if (ws && agents.pi) spawnTerminal(ws.id, ws.path, 'pi'); break
         case 'newTawx': if (ws && agents.tawx) spawnTerminal(ws.id, ws.path, 'tawx'); break
+        case 'addFolder': addFolder(); break
         case 'closeTerminal': if (activeId) removeTerminal(activeId); break
         case 'toggleSidebar': setSidebarHidden(h => !h); break
       }
@@ -374,7 +375,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [bindings, agents, activeWorkspace, workspaces, activeId, spawnTerminal, removeTerminal])
+  }, [bindings, agents, activeWorkspace, workspaces, activeId, spawnTerminal, removeTerminal, addFolder])
 
   const rebind = useCallback((id: string, combo: string) => {
     setBindings(prev => {

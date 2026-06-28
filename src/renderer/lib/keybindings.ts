@@ -14,6 +14,7 @@ export const DEFAULT_BINDINGS: Binding[] = [
   { id: 'newCodex', label: 'New Codex session', combo: 'Cmd+Shift+X' },
   { id: 'newPi', label: 'New PI session', combo: 'Cmd+Shift+P' },
   { id: 'newTawx', label: 'New tawx session', combo: 'Cmd+Shift+A' },
+  { id: 'addFolder', label: 'Add workspace folder', combo: 'Cmd+Shift+N' },
   { id: 'closeTerminal', label: 'Close terminal', combo: 'Cmd+W' },
   { id: 'toggleSidebar', label: 'Toggle sidebar', combo: 'Cmd+B' }
 ]
