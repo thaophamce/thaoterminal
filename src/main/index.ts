@@ -8,6 +8,7 @@ import os from 'os'
 import fs from 'fs'
 import { spawn } from 'child_process'
 import { PtyManager } from './pty-manager'
+import { getLimits } from './limits'
 
 const ptyManager = new PtyManager()
 let mainWindow: BrowserWindow | null = null
@@ -572,6 +573,24 @@ ipcMain.handle('usage:get', () => {
     }
   } catch {
     return { claude: emptyStat(), codex: emptyStat(), pi: emptyStat(), tawx: emptyStat() }
+  }
+})
+
+// Live rolling rate-limit usage (5h / weekly) for Claude + Codex. Unlike
+// usage:get (which sums local transcripts), this asks each provider's API.
+let limitsCache: { at: number; data: unknown } | null = null
+ipcMain.handle('limits:get', async () => {
+  // De-dupe bursts: each call hits the network, so reuse a result < 15s old.
+  if (limitsCache && Date.now() - limitsCache.at < 15000) return limitsCache.data
+  try {
+    const data = await getLimits()
+    limitsCache = { at: Date.now(), data }
+    return data
+  } catch {
+    return {
+      claude: { ok: false, session5h: null, weekly7d: null, error: 'Failed to read Claude limits.' },
+      codex: { ok: false, session5h: null, weekly7d: null, error: 'Failed to read Codex limits.' }
+    }
   }
 })
 

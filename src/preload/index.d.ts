@@ -75,11 +75,39 @@ export interface UsageAPI {
   get: () => Promise<UsageSnapshot>
 }
 
+export interface LimitWindow {
+  label: string
+  usedPercent: number
+  resetAt: number
+  resetMinutes: number
+  status: string
+}
+
+export interface ProviderLimits {
+  ok: boolean
+  session5h: LimitWindow | null
+  weekly7d: LimitWindow | null
+  plan?: string | null
+  error?: string | null
+  updatedAt?: string
+}
+
+export interface LimitsSnapshot {
+  claude: ProviderLimits
+  codex: ProviderLimits
+}
+
+export interface LimitsAPI {
+  /** Live rolling rate-limit usage (5h / weekly %) for Claude Code and Codex */
+  get: () => Promise<LimitsSnapshot>
+}
+
 declare global {
   interface Window {
     terminal: TerminalAPI
     app: AppAPI
     workspace: WorkspaceAPI
     usage: UsageAPI
+    limits: LimitsAPI
   }
 }

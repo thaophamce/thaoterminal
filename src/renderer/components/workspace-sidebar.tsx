@@ -2,10 +2,10 @@
  * Workspace Sidebar - folder tree grouping terminals by working directory.
  * Each folder is a saved path; clicking + spawns a terminal rooted in that path.
  */
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, TawxIcon } from './icons'
 import type { AgentState } from '../lib/agents'
-import type { UsageSnapshot, UpdateInfo } from '../../preload/index.d'
+import type { UsageSnapshot, LimitsSnapshot, ProviderLimits, LimitWindow, UpdateInfo } from '../../preload/index.d'
 
 export type TermKind = 'shell' | 'claude' | 'codex' | 'pi' | 'tawx'
 
@@ -51,6 +51,7 @@ interface Props {
   onCloseTerminal: (id: string) => void
   onRenameTerminal: (id: string, name: string) => void
   usage: UsageSnapshot | null
+  limits: LimitsSnapshot | null
   version: string
   update: UpdateInfo | null
   onOpenReleases: () => void
@@ -62,6 +63,52 @@ function fmtTok(n: number): string {
   if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M'
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'
   return String(n)
+}
+
+function fmtReset(minutes: number): string {
+  if (!minutes || minutes <= 0) return ''
+  if (minutes < 60) return `resets in ${minutes}m`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h < 24) return `resets in ${h}h${m ? ` ${m}m` : ''}`
+  const d = Math.floor(h / 24)
+  return `resets in ${d}d ${h % 24}h`
+}
+
+/** Color the bar by how close to the limit we are. */
+function limitTone(pct: number): string {
+  if (pct >= 90) return 'crit'
+  if (pct >= 70) return 'warn'
+  return 'ok'
+}
+
+function LimitBar({ kind, win }: { kind: string; win: LimitWindow }) {
+  const pct = Math.round(win.usedPercent)
+  const reset = fmtReset(win.resetMinutes)
+  return (
+    <div className="lim-bar-row" title={`${kind} · ${win.label}: ${pct}% used${reset ? ` · ${reset}` : ''}`}>
+      <span className="lim-win">{win.label}</span>
+      <div className="lim-track">
+        <div className={`lim-fill ${limitTone(win.usedPercent)}`} style={{ width: `${Math.min(100, Math.max(2, pct))}%` }} />
+      </div>
+      <span className="lim-pct">{pct}%</span>
+    </div>
+  )
+}
+
+function ProviderLimitRows({ kind, icon, data }: { kind: string; icon: ReactNode; data: ProviderLimits | undefined }) {
+  if (!data) return null
+  const wins = [data.session5h, data.weekly7d].filter(Boolean) as LimitWindow[]
+  return (
+    <div className="lim-provider">
+      <div className="lim-head-row">
+        <span className={`u-ic ${kind.toLowerCase()}`}>{icon}</span>
+        <span className="lim-name">{kind}</span>
+        {!data.ok && <span className="lim-err" title={data.error || ''}>—</span>}
+      </div>
+      {data.ok && wins.map((w) => <LimitBar key={w.label} kind={kind} win={w} />)}
+    </div>
+  )
 }
 
 /** Split a path into a dim parent + a bright basename for display. */
@@ -76,7 +123,7 @@ function splitPath(p: string, home: string): { parent: string; base: string } {
 export function WorkspaceSidebar({
   workspaces, activeId, busy, home, query, onQuery,
   onAddFolder, onRemoveFolder, onToggle, onAddTerminal, onAddClaude, onAddCodex, onAddPi, onAddTawx,
-  agents, onSelectTerminal, onCloseTerminal, onRenameTerminal, usage, version, update, onOpenReleases,
+  agents, onSelectTerminal, onCloseTerminal, onRenameTerminal, usage, limits, version, update, onOpenReleases,
   onUpdate, hotkeyIndex
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -255,6 +302,14 @@ export function WorkspaceSidebar({
               <span className="u-cost">~${usage.tawx.cost.toFixed(2)}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {limits && ((agents.claude && limits.claude) || (agents.codex && limits.codex)) && (
+        <div className="ws-limits" title="Rolling rate-limit usage (5h / weekly) — live from Claude & Codex APIs">
+          <div className="ws-usage-head">Rate limits</div>
+          {agents.claude && <ProviderLimitRows kind="Claude" icon={<ClaudeIcon size={12} />} data={limits.claude} />}
+          {agents.codex && <ProviderLimitRows kind="Codex" icon={<CodexIcon size={12} />} data={limits.codex} />}
         </div>
       )}
 

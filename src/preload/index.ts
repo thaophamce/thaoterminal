@@ -42,3 +42,7 @@ contextBridge.exposeInMainWorld('workspace', {
 contextBridge.exposeInMainWorld('usage', {
   get: () => ipcRenderer.invoke('usage:get')
 })
+
+contextBridge.exposeInMainWorld('limits', {
+  get: () => ipcRenderer.invoke('limits:get')
+})

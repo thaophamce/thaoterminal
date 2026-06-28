@@ -8,7 +8,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { TerminalInstance } from './terminal-instance'
 import { WorkspaceSidebar, Workspace, Term, TermKind } from './workspace-sidebar'
 import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, TawxIcon, GearIcon } from './icons'
-import type { UsageSnapshot, UpdateInfo } from '../../preload/index.d'
+import type { UsageSnapshot, LimitsSnapshot, UpdateInfo } from '../../preload/index.d'
 import { KeybindingsModal } from './keybindings-modal'
 import { UpdateModal } from './update-modal'
 import { Binding, loadBindings, saveBindings, eventToCombo } from '../lib/keybindings'
@@ -38,6 +38,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     return saved >= 220 && saved <= 640 ? saved : 340
   })
   const [usage, setUsage] = useState<UsageSnapshot | null>(null)
+  const [limits, setLimits] = useState<LimitsSnapshot | null>(null)
   const [version, setVersion] = useState('')
   const [update, setUpdate] = useState<UpdateInfo | null>(null)
   const [sidebarHidden, setSidebarHidden] = useState(false)
@@ -304,6 +305,15 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     return () => { alive = false; clearInterval(iv) }
   }, [])
 
+  // --- poll live 5h / weekly rate-limit usage (network call, so slower cadence) ---
+  useEffect(() => {
+    let alive = true
+    const tick = () => window.limits.get().then(l => { if (alive) setLimits(l) }).catch(() => {})
+    tick()
+    const iv = setInterval(tick, 60000)
+    return () => { alive = false; clearInterval(iv) }
+  }, [])
+
   // --- version + update check (on launch, then every 30 min) ---
   useEffect(() => {
     window.app.getVersion().then(setVersion).catch(() => {})
@@ -500,6 +510,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         onCloseTerminal={removeTerminal}
         onRenameTerminal={renameTerminal}
         usage={usage}
+        limits={limits}
         version={version}
         update={update}
         onOpenReleases={openReleases}
