@@ -204,7 +204,7 @@ export function WorkspaceSidebar({
                       <div
                         key={t.id}
                         className={`term-card ${isActive ? 'active' : ''}`}
-                        title={hotkeyIndex[t.id] ? `${t.name}  ·  jump ⌘${hotkeyIndex[t.id]}  ·  double-click to rename` : `${t.name}  ·  double-click to rename`}
+                        title={hotkeyIndex[t.id] ? `${t.name}  ·  jump Ctrl+${hotkeyIndex[t.id]}  ·  double-click to rename` : `${t.name}  ·  double-click to rename`}
                         onClick={() => onSelectTerminal(t.id)}
                       >
                         <span className={`status-dot ${isBusy ? 'busy' : 'idle'}`} />
@@ -237,10 +237,10 @@ export function WorkspaceSidebar({
                         {t.note?.trim() && <span className="term-note-dot" title={t.note}>📝</span>}
                         {isActive && <span className="term-state">active</span>}
                         {!isActive && isBusy && <span className="term-running">running</span>}
-                        {hotkeyIndex[t.id] && <span className="term-num" title={`Jump: ⌘${hotkeyIndex[t.id]}`}>⌘{hotkeyIndex[t.id]}</span>}
+                        {hotkeyIndex[t.id] && <span className="term-num" title={`Jump: Ctrl+${hotkeyIndex[t.id]}`}>^{hotkeyIndex[t.id]}</span>}
                         <button
                           className="term-close"
-                          title="Close terminal (⌘W when active)"
+                          title="Close terminal (Ctrl+W when active)"
                           onClick={(e) => { e.stopPropagation(); onCloseTerminal(t.id) }}
                         >×</button>
                       </div>
@@ -342,7 +342,7 @@ export function WorkspaceSidebar({
 
       <div className="ws-version">
         <span className="v-tag" onClick={onOpenReleases} title="Open releases" style={{ cursor: 'pointer' }}>
-          TawTerminal v{version || '—'}
+          ThaoTerminal v{version || '—'}
         </span>
         {update?.hasUpdate ? (
           <button className="v-update" onClick={onUpdate} title="Show how to update to the latest version">

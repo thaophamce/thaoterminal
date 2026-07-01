@@ -49,6 +49,12 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   const [showRemote, setShowRemote] = useState(false)
   const loadedRef = useRef(false)
   const resizingRef = useRef(false)
+
+  const handleFileAdd = useCallback(async () => {
+    const path = await window.workspace.openFile()
+    if (!path || !activeId) return
+    window.terminal.write(activeId, path)
+  }, [activeId])
   const busyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // Derived
@@ -441,11 +447,11 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         <div className="rail-ic logo">{'>_'}</div>
         <button
           className={`rail-toggle ${sidebarHidden ? '' : 'active'}`}
-          title={sidebarHidden ? 'Show sidebar (⌘B)' : 'Hide sidebar (⌘B)'}
+          title={sidebarHidden ? 'Show sidebar (Ctrl+B)' : 'Hide sidebar (Ctrl+B)'}
           onClick={() => setSidebarHidden(h => !h)}
         >
           <span className="rt-ic">◧</span>
-          <span className="rt-kbd">⌘B</span>
+          <span className="rt-kbd">Ctrl+B</span>
         </button>
         <div className="rail-spacer" />
         <button className="rail-settings" title="Remote access (control from your phone)" onClick={() => setShowRemote(true)}>
@@ -481,8 +487,8 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
 
       {/* Floating restore pill when the sidebar is hidden */}
       {sidebarHidden && (
-        <button className="sidebar-restore" onClick={() => setSidebarHidden(false)} title="Show sidebar (⌘B)">
-          ◧ Show sidebar <kbd>⌘B</kbd>
+        <button className="sidebar-restore" onClick={() => setSidebarHidden(false)} title="Show sidebar (Ctrl+B)">
+          ◧ Show sidebar <kbd>Ctrl+B</kbd>
         </button>
       )}
 
@@ -547,21 +553,21 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
             <div
               key={t.id}
               className={`ws-tab ${t.id === activeId ? 'active' : ''}`}
-              title={hotkeyIndex[t.id] ? `${t.name}  ·  jump with ⌘${hotkeyIndex[t.id]}` : t.name}
+              title={hotkeyIndex[t.id] ? `${t.name}  ·  jump with Ctrl+${hotkeyIndex[t.id]}` : t.name}
               onClick={() => setActiveId(t.id)}
             >
               <span className={`ws-tab-ic ${t.kind}`}>
                 {t.kind === 'claude' ? <ClaudeIcon size={13} /> : t.kind === 'codex' ? <CodexIcon size={13} /> : t.kind === 'pi' ? <PiIcon size={13} /> : t.kind === 'tawx' ? <TawxIcon size={13} /> : <TerminalIcon size={13} />}
               </span>
               <span>{t.name}</span>
-              <button className="ws-tab-x" title="Close terminal (⌘W)" onClick={(e) => { e.stopPropagation(); removeTerminal(t.id) }}>×</button>
+              <button className="ws-tab-x" title="Close terminal (Ctrl+W)" onClick={(e) => { e.stopPropagation(); removeTerminal(t.id) }}>×</button>
             </div>
           ))}
           {activeWorkspace && (
             <>
               <button
                 className="ws-tab-add"
-                title="New terminal in this folder (⌘⇧T / ⌘N)"
+                title="New terminal in this folder (Ctrl+Shift+T / Ctrl+N)"
                 onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}
               >+</button>
               {agents.claude && <button
@@ -601,8 +607,9 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
                 title={activeTerm.noteOpen ? 'Hide sticky note' : 'Sticky note for this terminal'}
                 onClick={() => toggleNote(activeTerm.id)}
               >📝</button>
-              <button className="tb-ic" title="New terminal in this folder (⌘⇧T / ⌘N)" onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}>+</button>
-              <button className="tb-ic" title="Close this terminal (⌘W)" onClick={() => removeTerminal(activeTerm.id)}>🗑</button>
+              <button className="tb-ic" title="Add file path to terminal" onClick={handleFileAdd}>📎</button>
+              <button className="tb-ic" title="New terminal in this folder (Ctrl+Shift+T / Ctrl+N)" onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}>+</button>
+              <button className="tb-ic" title="Close this terminal (Ctrl+W)" onClick={() => removeTerminal(activeTerm.id)}>🗑</button>
             </div>
           </div>
         )}

@@ -16,13 +16,14 @@ const ptyManager = new PtyManager()
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
+  const isMac = process.platform === 'darwin'
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 600,
     minHeight: 400,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 12, y: 12 },
+    titleBarStyle: isMac ? 'hiddenInset' : 'default',
+    ...(isMac ? { trafficLightPosition: { x: 12, y: 12 } } : {}),
     backgroundColor: '#1a1b26',
     show: false,
     webPreferences: {
@@ -102,6 +103,20 @@ ipcMain.handle('app:getTheme', () => {
 
 ipcMain.handle('app:getHome', () => os.homedir())
 
+ipcMain.handle('app:saveImage', async (_event, dataUrl: string) => {
+  try {
+    const downloadsDir = app.getPath('downloads')
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const filename = `paste-${timestamp}.png`
+    const filePath = join(downloadsDir, filename)
+    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '')
+    fs.writeFileSync(filePath, Buffer.from(base64, 'base64'))
+    return filePath
+  } catch {
+    return null
+  }
+})
+
 ipcMain.handle('app:getVersion', () => app.getVersion())
 
 const REPO = 'tawgroup/taw-terminal'
@@ -137,6 +152,8 @@ ipcMain.handle('app:releasesUrl', () => `https://github.com/${REPO}/releases`)
 // Self-update via the curl installer: spawn a detached updater that waits for
 // this app to quit, then downloads + installs the latest release and relaunches.
 ipcMain.handle('app:runUpdate', async () => {
+  // Self-update not supported on Windows — user must download from releases page.
+  if (process.platform === 'win32') return false
   const pid = process.pid
   const script =
     `for i in $(seq 1 40); do kill -0 ${pid} 2>/dev/null || break; sleep 0.5; done; ` +
@@ -173,6 +190,17 @@ ipcMain.handle('dialog:openFolder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
     title: 'Add a workspace folder'
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
+
+// Open native file picker, return the chosen file path (or null if cancelled)
+ipcMain.handle('dialog:openFile', async () => {
+  if (!mainWindow) return null
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    title: 'Add file to terminal'
   })
   if (result.canceled || result.filePaths.length === 0) return null
   return result.filePaths[0]

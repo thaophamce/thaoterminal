@@ -43,7 +43,7 @@
   },
   "build": {
     "appId": "com.tawgroup.terminal",
-    "productName": "TawTerminal",
+    "productName": "ThaoTerminal",
     "icon": "resources/icon.icns",
     "afterSign": "scripts/notarize.js",
     "mac": {

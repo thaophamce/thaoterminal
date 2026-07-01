@@ -98,7 +98,7 @@ export function KeybindingsModal({ bindings, onChange, onReset, agents, onToggle
 
           <div className="kb-row fixed">
             <span className="kb-label">Jump to terminal 1–9</span>
-            <span className="kb-combo static">⌘1 … ⌘9</span>
+            <span className="kb-combo static">Ctrl+1 … Ctrl+9</span>
           </div>
         </div>
 

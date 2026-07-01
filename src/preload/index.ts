@@ -31,11 +31,13 @@ contextBridge.exposeInMainWorld('app', {
   checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
   releasesUrl: () => ipcRenderer.invoke('app:releasesUrl'),
   runUpdate: () => ipcRenderer.invoke('app:runUpdate'),
-  openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url)
+  openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+  saveImage: (dataUrl: string) => ipcRenderer.invoke('app:saveImage', dataUrl)
 })
 
 contextBridge.exposeInMainWorld('workspace', {
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
+  openFile: () => ipcRenderer.invoke('dialog:openFile'),
   load: () => ipcRenderer.invoke('workspaces:load'),
   save: (paths: string[]) => ipcRenderer.invoke('workspaces:save', paths),
   gitBranch: (cwd: string) => ipcRenderer.invoke('git:branch', cwd)

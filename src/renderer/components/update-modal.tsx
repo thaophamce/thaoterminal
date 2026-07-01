@@ -34,7 +34,7 @@ export function UpdateModal({ latest, onClose }: Props) {
     <div className="kb-overlay" onClick={onClose}>
       <div className="kb-modal upd-modal" onClick={e => e.stopPropagation()}>
         <div className="kb-head">
-          <h2>Update TawTerminal{latest ? ` → v${latest}` : ''}</h2>
+          <h2>Update ThaoTerminal{latest ? ` → v${latest}` : ''}</h2>
           <button className="kb-close" onClick={onClose} title="Close (Esc)">×</button>
         </div>
 
@@ -48,7 +48,7 @@ export function UpdateModal({ latest, onClose }: Props) {
               It downloads the latest version into <code>/Applications</code>.
             </li>
             <li>
-              When it finishes, <b>quit TawTerminal</b> (⌘Q) and <b>open it again</b> —
+              When it finishes, <b>quit ThaoTerminal</b> (Alt+F4) and <b>open it again</b> —
               you'll be on the new version.
             </li>
           </ol>
@@ -61,7 +61,7 @@ export function UpdateModal({ latest, onClose }: Props) {
           </div>
 
           <p className="upd-tip">
-            Tip: you can run it right here in a TawTerminal tab — just quit and reopen
+            Tip: you can run it right here in a ThaoTerminal tab — just quit and reopen
             after it's done.
           </p>
         </div>

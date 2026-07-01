@@ -118,7 +118,7 @@ export function TerminalTabs({ tabs, activeId, onSelect, onClose, onNew, onRenam
       </div>
 
       <div className="tabs-actions">
-        <button className="tab-action-btn" onClick={onNew} title="New Terminal (⌘⇧T)">
+        <button className="tab-action-btn" onClick={onNew} title="New Terminal (Ctrl+Shift+T)">
           +
         </button>
       </div>

@@ -72,7 +72,7 @@ function App() {
   return (
     <div className="m-app">
       <header className="m-header">
-        <span className="m-title">TawTerminal Remote</span>
+        <span className="m-title">ThaoTerminal Remote</span>
         <span className={`m-conn ${conn}`}>{conn}</span>
       </header>
       <div className="m-list">

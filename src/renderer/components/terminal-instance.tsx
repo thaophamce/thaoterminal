@@ -85,6 +85,23 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
 
     terminal.open(container)
 
+    // Windows clipboard shortcuts:
+    // Ctrl+V — xterm would treat as ^V (control char); return false so the browser
+    //           fires a paste event instead, which xterm's internal listener handles.
+    // Ctrl+C — if text is selected, copy it; otherwise fall through so xterm sends
+    //           ^C (SIGINT) to the PTY as normal.
+    terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        if (e.key === 'v') return false
+        if (e.key === 'c' || e.key === 'C') {
+          const sel = terminal.getSelection()
+          if (sel) navigator.clipboard.writeText(sel)
+          return false
+        }
+      }
+      return true
+    })
+
     // Create PTY (metadata lets remote phone clients list this session)
     window.terminal.create(id, cwd, { name, kind, workspacePath })
 
@@ -195,29 +212,41 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
     return () => resizeObserver.disconnect()
   }, [isActive, id])
 
-  // Image paste handler
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items
-    if (!items) return
-
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault()
-        const blob = item.getAsFile()
-        if (!blob) continue
-
-        const reader = new FileReader()
-        reader.onload = () => {
-          const dataUrl = reader.result as string
-          onImagePaste?.(dataUrl)
-
-          // Also write a placeholder to terminal
-          terminalRef.current?.write('\r\n\x1b[36m[Image pasted - see overlay]\x1b[0m\r\n')
+  // Image paste — use capture on window so we intercept before xterm's internal
+  // paste listener can call stopPropagation(). Only handle when this terminal is active.
+  useEffect(() => {
+    const handler = (e: ClipboardEvent) => {
+      if (!isActiveRef.current) return
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault()
+          const blob = item.getAsFile()
+          if (!blob) continue
+          const reader = new FileReader()
+          reader.onload = async () => {
+            const dataUrl = reader.result as string
+            onImagePaste?.(dataUrl)
+            try {
+              const filePath = await window.app.saveImage(dataUrl)
+              if (filePath) {
+                window.terminal.write(id, filePath)
+                terminalRef.current?.write(`\r\n\x1b[36m[Image saved → ${filePath}]\x1b[0m\r\n`)
+              } else {
+                terminalRef.current?.write('\r\n\x1b[33m[Image paste: could not save file]\x1b[0m\r\n')
+              }
+            } catch {
+              terminalRef.current?.write('\r\n\x1b[33m[Image paste: error saving file]\x1b[0m\r\n')
+            }
+          }
+          reader.readAsDataURL(blob)
+          return
         }
-        reader.readAsDataURL(blob)
-        return
       }
     }
+    window.addEventListener('paste', handler, true)
+    return () => window.removeEventListener('paste', handler, true)
   }, [onImagePaste])
 
   // Drag and drop image
@@ -229,9 +258,16 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
     for (const file of files) {
       if (file.type.startsWith('image/')) {
         const reader = new FileReader()
-        reader.onload = () => {
-          onImagePaste?.(reader.result as string)
-          terminalRef.current?.write('\r\n\x1b[36m[Image dropped - see overlay]\x1b[0m\r\n')
+        reader.onload = async () => {
+          const dataUrl = reader.result as string
+          onImagePaste?.(dataUrl)
+          try {
+            const filePath = await window.app.saveImage(dataUrl)
+            if (filePath) {
+              window.terminal.write(id, filePath)
+              terminalRef.current?.write(`\r\n\x1b[36m[Image saved → ${filePath}]\x1b[0m\r\n`)
+            }
+          } catch { /* ignore */ }
         }
         reader.readAsDataURL(file)
         return
@@ -246,7 +282,6 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
         className="terminal-instance"
         style={{ height: '100%' }}
         onClick={() => { terminalRef.current?.focus(); reassertSize() }}
-        onPaste={handlePaste}
         onDrop={handleDrop}
         onDragOver={(e) => e.preventDefault()}
       />

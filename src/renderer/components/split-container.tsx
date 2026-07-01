@@ -222,7 +222,7 @@ export function SplitContainer({ onImagePaste }: Props) {
           <button
             className="split-btn"
             onClick={splitPane}
-            title={`Split ${splitDirection} (⌘D)`}
+            title={`Split ${splitDirection} (Ctrl+D)`}
           >
             {splitDirection === 'horizontal' ? '⊞' : '⊟'}
           </button>

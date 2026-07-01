@@ -17,7 +17,8 @@ export function RemoteModal({ onClose }: Props) {
   const [cfCopied, setCfCopied] = useState(false)
   const [cloudflared, setCloudflared] = useState<boolean | null>(null)
 
-  const BREW_CMD = 'brew install cloudflared'
+  const isWindows = navigator.userAgent.includes('Windows')
+  const INSTALL_CMD = isWindows ? 'winget install Cloudflare.cloudflared' : 'brew install cloudflared'
 
   const refresh = useCallback(() => {
     window.remote.status().then(setStatus).catch(() => {})
@@ -41,7 +42,7 @@ export function RemoteModal({ onClose }: Props) {
   }, [onClose, refresh, checkCloudflared])
 
   const copyBrew = () => {
-    navigator.clipboard.writeText(BREW_CMD).then(() => {
+    navigator.clipboard.writeText(INSTALL_CMD).then(() => {
       setCfCopied(true); setTimeout(() => setCfCopied(false), 1800)
     }).catch(() => {})
   }
@@ -95,7 +96,7 @@ export function RemoteModal({ onClose }: Props) {
                     {' '}<code>https://….trycloudflare.com</code>. Install it, then start:
                   </p>
                   <div className="rmt-cmd">
-                    <code>{BREW_CMD}</code>
+                    <code>{INSTALL_CMD}</code>
                     <button className={`rmt-copy ${cfCopied ? 'done' : ''}`} onClick={copyBrew}>{cfCopied ? '✓' : 'Copy'}</button>
                   </div>
                   <button className="rmt-link" onClick={() => window.app.openExternal('https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/')}>
@@ -132,7 +133,7 @@ export function RemoteModal({ onClose }: Props) {
                 {status?.tunnelError && <div className="rmt-warn">⚠ {status.tunnelError}</div>}
                 {status?.tunnelError && cloudflared === false && (
                   <div className="rmt-cmd">
-                    <code>{BREW_CMD}</code>
+                    <code>{INSTALL_CMD}</code>
                     <button className={`rmt-copy ${cfCopied ? 'done' : ''}`} onClick={copyBrew}>{cfCopied ? '✓' : 'Copy'}</button>
                   </div>
                 )}

@@ -565,20 +565,20 @@ html, body, #root {
 .folder-ic { font-size: 12px; }
 .folder-path {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   min-width: 0;
   font-family: "JetBrains Mono", "SF Mono", monospace;
   font-size: 12px;
 }
-/* Parent dir truncates (left); the folder name always stays fully visible */
+/* Parent dir wraps if too long; folder name stays on same or next line */
 .fp-parent {
   opacity: 0.5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-all;
   min-width: 0;
 }
-.fp-base { flex-shrink: 0; white-space: nowrap; }
+.fp-base { flex-shrink: 0; word-break: break-all; }
 .folder-branch {
   font-size: 10.5px;
   color: var(--accent);

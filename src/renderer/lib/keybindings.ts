@@ -9,14 +9,14 @@ export interface Binding {
 }
 
 export const DEFAULT_BINDINGS: Binding[] = [
-  { id: 'newTerminal', label: 'New terminal', combo: 'Cmd+Shift+T' },
-  { id: 'newClaude', label: 'New Claude session', combo: 'Cmd+Shift+C' },
-  { id: 'newCodex', label: 'New Codex session', combo: 'Cmd+Shift+X' },
-  { id: 'newPi', label: 'New PI session', combo: 'Cmd+Shift+P' },
-  { id: 'newTawx', label: 'New tawx session', combo: 'Cmd+Shift+A' },
-  { id: 'addFolder', label: 'Add workspace folder', combo: 'Cmd+Shift+N' },
-  { id: 'closeTerminal', label: 'Close terminal', combo: 'Cmd+W' },
-  { id: 'toggleSidebar', label: 'Toggle sidebar', combo: 'Cmd+B' }
+  { id: 'newTerminal', label: 'New terminal', combo: 'Ctrl+Shift+T' },
+  { id: 'newClaude', label: 'New Claude session', combo: 'Ctrl+Shift+C' },
+  { id: 'newCodex', label: 'New Codex session', combo: 'Ctrl+Shift+X' },
+  { id: 'newPi', label: 'New PI session', combo: 'Ctrl+Shift+P' },
+  { id: 'newTawx', label: 'New tawx session', combo: 'Ctrl+Shift+A' },
+  { id: 'addFolder', label: 'Add workspace folder', combo: 'Ctrl+Shift+N' },
+  { id: 'closeTerminal', label: 'Close terminal', combo: 'Ctrl+W' },
+  { id: 'toggleSidebar', label: 'Toggle sidebar', combo: 'Ctrl+B' }
 ]
 
 const STORE_KEY = 'taw.keybindings'
@@ -37,15 +37,12 @@ export function eventToCombo(e: KeyboardEvent): string {
   return parts.join('+')
 }
 
-/** Pretty symbols for display: Cmd+Shift+C -> ⌘⇧C */
+/** Pretty display: Ctrl+Shift+C -> Ctrl+Shift+C */
 export function formatCombo(combo: string): string {
   return combo
-    .replace(/Cmd/g, '⌘')
-    .replace(/Shift/g, '⇧')
-    .replace(/Alt/g, '⌥')
-    .replace(/Ctrl/g, '⌃')
+    .replace(/Cmd/g, 'Ctrl')
     .split('+')
-    .join('')
+    .join('+')
 }
 
 export function loadBindings(): Binding[] {

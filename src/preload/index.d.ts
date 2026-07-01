@@ -24,6 +24,7 @@ export interface AppAPI {
   releasesUrl: () => Promise<string>
   runUpdate: () => Promise<boolean>
   openExternal: (url: string) => Promise<void>
+  saveImage: (dataUrl: string) => Promise<string | null>
 }
 
 export interface PersistedTerm {
@@ -51,6 +52,7 @@ export interface PersistedState {
 
 export interface WorkspaceAPI {
   openFolder: () => Promise<string | null>
+  openFile: () => Promise<string | null>
   // Returns the persisted session (new format), a legacy string[] of paths, or null
   load: () => Promise<PersistedState | string[] | null>
   save: (state: PersistedState) => Promise<void>
