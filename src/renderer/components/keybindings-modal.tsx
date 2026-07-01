@@ -5,13 +5,12 @@
 import { useState, useEffect } from 'react'
 import { Binding, eventToCombo, formatCombo } from '../lib/keybindings'
 import { AGENTS, AgentKind, AgentState } from '../lib/agents'
-import { ClaudeIcon, CodexIcon, PiIcon, TawxIcon } from './icons'
+import { ClaudeIcon, CodexIcon, PiIcon } from './icons'
 
 const AGENT_ICONS: Record<AgentKind, (p: { size?: number }) => JSX.Element> = {
   claude: ClaudeIcon,
   codex: CodexIcon,
-  pi: PiIcon,
-  tawx: TawxIcon
+  pi: PiIcon
 }
 
 interface Props {

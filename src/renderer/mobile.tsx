@@ -16,7 +16,7 @@ import { RemoteClient, type ConnState } from './lib/remote-client'
 interface TerminalMeta {
   id: string
   name: string
-  kind: 'shell' | 'claude' | 'codex' | 'pi' | 'tawx'
+  kind: 'shell' | 'claude' | 'codex' | 'pi'
   cwd: string
   workspacePath: string
 }
@@ -31,7 +31,7 @@ function shortPath(p: string): string {
 }
 
 const KIND_LABEL: Record<TerminalMeta['kind'], string> = {
-  shell: 'shell', claude: 'Claude', codex: 'Codex', pi: 'PI', tawx: 'tawx'
+  shell: 'shell', claude: 'Claude', codex: 'Codex', pi: 'PI'
 }
 
 function App() {

@@ -16,7 +16,7 @@ import { EventEmitter } from 'events'
 export interface TerminalMeta {
   id: string
   name: string
-  kind: 'shell' | 'claude' | 'codex' | 'pi' | 'tawx'
+  kind: 'shell' | 'claude' | 'codex' | 'pi'
   cwd: string
   workspacePath: string
 }

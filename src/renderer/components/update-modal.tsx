@@ -1,12 +1,12 @@
 /**
  * Update guide. Instead of self-updating, we show the user a one-line install
  * command to copy, paste into any terminal, and run. The installer downloads
- * the latest release into /Applications; the user then quits TawTerminal and
+ * the latest release into /Applications; the user then quits ThaoTerminal and
  * reopens it to pick up the new version.
  */
 import { useState, useEffect } from 'react'
 
-const REPO = 'tawgroup/taw-terminal'
+const REPO = 'thaophamce/thaoterminal'
 const INSTALL_CMD = `curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash`
 
 interface Props {

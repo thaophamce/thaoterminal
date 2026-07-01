@@ -25,12 +25,20 @@ export interface AppAPI {
   runUpdate: () => Promise<boolean>
   openExternal: (url: string) => Promise<void>
   saveImage: (dataUrl: string) => Promise<string | null>
+  setTitleBarOverlay: (opts: { color: string; symbolColor: string }) => Promise<void>
+  minimize: () => Promise<void>
+  toggleMaximize: () => Promise<void>
+  closeWindow: () => Promise<void>
+  quit: () => Promise<void>
+  copy: () => Promise<void>
+  paste: () => Promise<void>
+  platform: string
 }
 
 export interface PersistedTerm {
   name: string
   cwd: string
-  kind?: 'shell' | 'claude' | 'codex' | 'pi' | 'tawx'
+  kind?: 'shell' | 'claude' | 'codex' | 'pi'
   claudeSessionId?: string
   /** Free-form sticky note pinned to this terminal */
   note?: string
@@ -40,6 +48,7 @@ export interface PersistedTerm {
 
 export interface PersistedWorkspace {
   path: string
+  label?: string
   collapsed?: boolean
   terminals: PersistedTerm[]
 }
@@ -70,11 +79,10 @@ export interface UsageSnapshot {
   claude: UsageStat
   codex: UsageStat
   pi: UsageStat
-  tawx: UsageStat
 }
 
 export interface UsageAPI {
-  /** Aggregate today's token usage/cost from ~/.claude, ~/.codex, ~/.pi and ~/.tawx */
+  /** Aggregate today's token usage/cost from ~/.claude, ~/.codex and ~/.pi */
   get: () => Promise<UsageSnapshot>
 }
 

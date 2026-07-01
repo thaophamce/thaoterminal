@@ -51,7 +51,6 @@ html, body, #root {
 .kind-claude .m-dot { background: #d97757; }
 .kind-codex .m-dot { background: #10a37f; }
 .kind-pi .m-dot { background: #a78bfa; }
-.kind-tawx .m-dot { background: #22d3ee; }
 
 .m-term { flex: 1; min-height: 0; padding: 6px 6px 0; background: #1a1b26; overflow: hidden; }
 .m-term .xterm { height: 100%; }

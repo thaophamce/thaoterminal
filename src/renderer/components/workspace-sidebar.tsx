@@ -3,11 +3,11 @@
  * Each folder is a saved path; clicking + spawns a terminal rooted in that path.
  */
 import { useState, type ReactNode } from 'react'
-import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, TawxIcon } from './icons'
+import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, GearIcon } from './icons'
 import type { AgentState } from '../lib/agents'
 import type { UsageSnapshot, LimitsSnapshot, ProviderLimits, LimitWindow, UpdateInfo } from '../../preload/index.d'
 
-export type TermKind = 'shell' | 'claude' | 'codex' | 'pi' | 'tawx'
+export type TermKind = 'shell' | 'claude' | 'codex' | 'pi'
 
 export interface Term {
   id: string
@@ -26,6 +26,7 @@ export interface Term {
 export interface Workspace {
   id: string
   path: string
+  label?: string
   branch?: string | null
   collapsed?: boolean
   terminals: Term[]
@@ -41,11 +42,11 @@ interface Props {
   onAddFolder: () => void
   onRemoveFolder: (id: string) => void
   onToggle: (id: string) => void
+  onRenameFolder: (id: string, label: string) => void
   onAddTerminal: (workspaceId: string) => void
   onAddClaude: (workspaceId: string) => void
   onAddCodex: (workspaceId: string) => void
   onAddPi: (workspaceId: string) => void
-  onAddTawx: (workspaceId: string) => void
   agents: AgentState
   onSelectTerminal: (id: string) => void
   onCloseTerminal: (id: string) => void
@@ -57,6 +58,9 @@ interface Props {
   onOpenReleases: () => void
   onUpdate: () => void
   hotkeyIndex: Record<string, number>
+  onOpenRemote: () => void
+  onOpenSettings: () => void
+  onToggleSidebar: () => void
 }
 
 function fmtTok(n: number): string {
@@ -122,12 +126,14 @@ function splitPath(p: string, home: string): { parent: string; base: string } {
 
 export function WorkspaceSidebar({
   workspaces, activeId, busy, home, query, onQuery,
-  onAddFolder, onRemoveFolder, onToggle, onAddTerminal, onAddClaude, onAddCodex, onAddPi, onAddTawx,
+  onAddFolder, onRemoveFolder, onToggle, onRenameFolder, onAddTerminal, onAddClaude, onAddCodex, onAddPi,
   agents, onSelectTerminal, onCloseTerminal, onRenameTerminal, usage, limits, version, update, onOpenReleases,
-  onUpdate, hotkeyIndex
+  onUpdate, hotkeyIndex, onOpenRemote, onOpenSettings, onToggleSidebar
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [folderEditingId, setFolderEditingId] = useState<string | null>(null)
+  const [folderEditValue, setFolderEditValue] = useState('')
   // Usage + rate-limit footer is collapsed by default; expand on demand. Persisted.
   const [statsOpen, setStatsOpen] = useState(() => {
     try { return localStorage.getItem('ws-stats-open') === '1' } catch { return false }
@@ -141,6 +147,11 @@ export function WorkspaceSidebar({
   const commitRename = () => {
     if (editingId && editValue.trim()) onRenameTerminal(editingId, editValue.trim())
     setEditingId(null)
+  }
+  const startFolderRename = (ws: Workspace) => { setFolderEditingId(ws.id); setFolderEditValue(ws.label || ws.path) }
+  const commitFolderRename = () => {
+    if (folderEditingId) onRenameFolder(folderEditingId, folderEditValue.trim())
+    setFolderEditingId(null)
   }
 
   const q = query.trim().toLowerCase()
@@ -158,6 +169,7 @@ export function WorkspaceSidebar({
   return (
     <div className="ws-sidebar">
       <div className="ws-head">
+        <button className="ws-sidebar-toggle" title="Hide sidebar (Ctrl+B)" onClick={onToggleSidebar}>◧</button>
         <h2>Workspace Paths</h2>
         <span className="ws-pill">{workspaces.length} {workspaces.length === 1 ? 'folder' : 'folders'}</span>
         <button className="ws-icbtn" title="Add folder" onClick={onAddFolder}>+</button>
@@ -181,16 +193,40 @@ export function WorkspaceSidebar({
               <div className="folder-head">
                 <button className="chev" onClick={() => onToggle(ws.id)}>▾</button>
                 <span className="folder-ic">📁</span>
-                <span className="folder-path" title={ws.path}>
-                  <span className="fp-parent">{parent}</span>
-                  <span className="fp-base">{base}</span>
-                </span>
+                {folderEditingId === ws.id ? (
+                  <input
+                    className="folder-rename"
+                    autoFocus
+                    value={folderEditValue}
+                    onChange={(e) => setFolderEditValue(e.target.value)}
+                    onBlur={commitFolderRename}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitFolderRename()
+                      if (e.key === 'Escape') setFolderEditingId(null)
+                      e.stopPropagation()
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : ws.label ? (
+                  <span
+                    className="folder-label"
+                    title={`${ws.path} — double-click to rename`}
+                    onDoubleClick={(e) => { e.stopPropagation(); startFolderRename(ws) }}
+                  >{ws.label}</span>
+                ) : (
+                  <span
+                    className="folder-path"
+                    title={`${ws.path} — double-click to rename`}
+                    onDoubleClick={(e) => { e.stopPropagation(); startFolderRename(ws) }}
+                  >
+                    <span className="fp-parent">{parent}</span>
+                    <span className="fp-base">{base}</span>
+                  </span>
+                )}
                 {ws.branch && <span className="folder-branch">⎇ {ws.branch}</span>}
-                {count > 0 && <span className="folder-badge">{count} {count === 1 ? 'terminal' : 'terminals'}</span>}
                 {agents.claude && <button className="folder-claude" title="New Claude Code session here" onClick={() => onAddClaude(ws.id)}><ClaudeIcon size={13} /></button>}
                 {agents.codex && <button className="folder-codex" title="New Codex session here" onClick={() => onAddCodex(ws.id)}><CodexIcon size={13} /></button>}
                 {agents.pi && <button className="folder-pi" title="New PI session here" onClick={() => onAddPi(ws.id)}><PiIcon size={13} /></button>}
-                {agents.tawx && <button className="folder-tawx" title="New tawx session here" onClick={() => onAddTawx(ws.id)}><TawxIcon size={13} /></button>}
                 <button className="folder-add" title="New terminal here" onClick={() => onAddTerminal(ws.id)}>+</button>
                 <button className="folder-rm" title="Remove folder" onClick={() => onRemoveFolder(ws.id)}>🗑</button>
               </div>
@@ -211,7 +247,6 @@ export function WorkspaceSidebar({
                         {t.kind === 'claude' && <span className="term-kind-ic claude" title="Claude Code"><ClaudeIcon size={12} /></span>}
                         {t.kind === 'codex' && <span className="term-kind-ic codex" title="Codex"><CodexIcon size={12} /></span>}
                         {t.kind === 'pi' && <span className="term-kind-ic pi" title="PI"><PiIcon size={12} /></span>}
-                        {t.kind === 'tawx' && <span className="term-kind-ic tawx" title="tawx"><TawxIcon size={12} /></span>}
                         {t.kind === 'shell' && <span className="term-kind-ic shell" title="Terminal"><TerminalIcon size={12} /></span>}
                         {editingId === t.id ? (
                           <input
@@ -237,7 +272,6 @@ export function WorkspaceSidebar({
                         {t.note?.trim() && <span className="term-note-dot" title={t.note}>📝</span>}
                         {isActive && <span className="term-state">active</span>}
                         {!isActive && isBusy && <span className="term-running">running</span>}
-                        {hotkeyIndex[t.id] && <span className="term-num" title={`Jump: Ctrl+${hotkeyIndex[t.id]}`}>^{hotkeyIndex[t.id]}</span>}
                         <button
                           className="term-close"
                           title="Close terminal (Ctrl+W when active)"
@@ -259,9 +293,6 @@ export function WorkspaceSidebar({
                       </button>}
                       {agents.pi && <button className="terms-empty pi" onClick={() => onAddPi(ws.id)}>
                         <PiIcon size={12} /> PI
-                      </button>}
-                      {agents.tawx && <button className="terms-empty tawx" onClick={() => onAddTawx(ws.id)}>
-                        <TawxIcon size={12} /> tawx
                       </button>}
                     </div>
                   )}
@@ -287,13 +318,13 @@ export function WorkspaceSidebar({
             <span className="ws-stats-label">Usage &amp; limits</span>
             {!statsOpen && usage && (
               <span className="ws-stats-peek">
-                ~${(usage.claude.cost + usage.codex.cost + usage.pi.cost + usage.tawx.cost).toFixed(2)} today
+                ~${(usage.claude.cost + usage.codex.cost + usage.pi.cost).toFixed(2)} today
               </span>
             )}
           </button>
 
           {statsOpen && usage && (
-            <div className="ws-usage" title="Token usage today (from ~/.claude, ~/.codex, ~/.pi and ~/.tawx)">
+            <div className="ws-usage" title="Token usage today (from ~/.claude, ~/.codex and ~/.pi)">
               <div className="ws-usage-head">Today's usage</div>
               {agents.claude && (
                 <div className="ws-usage-row">
@@ -319,14 +350,6 @@ export function WorkspaceSidebar({
                   <span className="u-cost">~${usage.pi.cost.toFixed(2)}</span>
                 </div>
               )}
-              {agents.tawx && (
-                <div className="ws-usage-row">
-                  <span className="u-ic tawx"><TawxIcon size={12} /></span>
-                  <span className="u-name">tawx</span>
-                  <span className="u-tok">{fmtTok(usage.tawx.tokens)}</span>
-                  <span className="u-cost">~${usage.tawx.cost.toFixed(2)}</span>
-                </div>
-              )}
             </div>
           )}
 
@@ -339,6 +362,17 @@ export function WorkspaceSidebar({
           )}
         </div>
       )}
+
+      <div className="ws-nav">
+        <button className="ws-nav-row" onClick={onOpenRemote}>
+          <span className="ws-nav-ic">📱</span>
+          <span>Remote Access</span>
+        </button>
+        <button className="ws-nav-row" onClick={onOpenSettings}>
+          <span className="ws-nav-ic"><GearIcon size={14} /></span>
+          <span>Settings</span>
+        </button>
+      </div>
 
       <div className="ws-version">
         <span className="v-tag" onClick={onOpenReleases} title="Open releases" style={{ cursor: 'pointer' }}>

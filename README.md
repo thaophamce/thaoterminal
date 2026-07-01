@@ -1,12 +1,12 @@
-# TawTerminal
+# ThaoTerminal
 
 A modern terminal built for developers who work with AI coding agents like **Claude Code** on macOS. Smoother typing, zero input lag, beautiful themes.
 
-> Based on [VibeTerminal](https://github.com/nghiahsgs/VibeTerminal) (MIT), rebranded and maintained by [TAW Group](https://github.com/tawgroup).
+> Based on [VibeTerminal](https://github.com/nghiahsgs/VibeTerminal) (MIT), rebranded and maintained by [thaophamce](https://github.com/thaophamce).
 
 ## Why Not the Default Terminal?
 
-| | macOS Terminal / iTerm2 | TawTerminal |
+| | macOS Terminal / iTerm2 | ThaoTerminal |
 |---|---|---|
 | **Typing feel** | Can stutter — characters appear late when shell is busy | Instant keystroke rendering via Xterm.js, no "dragging characters" |
 | **Rendering** | CPU-based text drawing | GPU-accelerated (WebGL) at 60fps |
@@ -20,7 +20,7 @@ A modern terminal built for developers who work with AI coding agents like **Cla
 
 When running Claude Code, your terminal receives **massive streams of AI-generated output** while you're still typing. Default terminals render everything synchronously — shell output and your keystrokes compete for the same thread, causing the "dragging characters" effect.
 
-TawTerminal separates concerns:
+ThaoTerminal separates concerns:
 
 ```
 You (keystrokes) ─→ Xterm.js ─→ IPC ─→ PTY Manager ─→ Shell (zsh/bash)
@@ -51,25 +51,22 @@ You (keystrokes) ─→ Xterm.js ─→ IPC ─→ PTY Manager ─→ Shell (zsh
 One line — downloads the latest release, installs into `/Applications`, and launches:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tawgroup/taw-terminal/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/thaophamce/thaoterminal/main/install.sh | bash
 ```
 
-Or grab the `.dmg` from [Releases](https://github.com/tawgroup/taw-terminal/releases) and drag it into Applications. The app shows its version and checks for updates in the sidebar footer.
+Or grab the `.dmg` from [Releases](https://github.com/thaophamce/thaoterminal/releases) and drag it into Applications. The app shows its version and checks for updates in the sidebar footer.
 
 ## Coding Agents
 
-TawTerminal launches four coding agents directly from the sidebar or top tab bar (each folder's row has a button per agent, color-coded). The agents are **separate CLIs** you install once — TawTerminal just spawns them in a terminal rooted at the folder. Install whichever you want:
+ThaoTerminal launches three coding agents directly from the sidebar or top tab bar (each folder's row has a button per agent, color-coded). The agents are **separate CLIs** you install once — ThaoTerminal just spawns them in a terminal rooted at the folder. Install whichever you want:
 
 | Agent | Install | First-run login | Shortcut |
 |-------|---------|-----------------|----------|
 | **Claude Code** | `curl -fsSL https://claude.ai/install.sh \| bash`  _(or `npm i -g @anthropic-ai/claude-code`)_ | run `claude`, sign in with your Anthropic / Claude subscription | `Cmd+Shift+C` |
 | **Codex** | `npm i -g @openai/codex` | run `codex`, sign in with your ChatGPT Plus/Pro account | `Cmd+Shift+X` |
 | **PI** | `npm i -g @earendil-works/pi-coding-agent`  _(needs Node ≥ 22.19)_ | run `pi`, follow the auth prompt | `Cmd+Shift+P` |
-| **tawx** (`tx`) | `npm i -g tawx-harness`  _(or `curl -fsSL https://raw.githubusercontent.com/tawgroup/tawx-harness/main/install.sh \| bash`)_ | run `tawx login` — pick provider: opencode / codex / claude | `Cmd+Shift+A` |
 
-After installing, click the agent's button in the sidebar (or press its shortcut) to start a session in the active folder. Sessions are restored on the next launch (`claude --resume`, `codex resume --last`, `pi --continue`, `tawx resume`).
-
-> **tawx** is TAW Group's own tiny, zero-dependency agent harness — a model, a short loop, and a few local tools. It supports a standing-goal mode (`/goal <objective>`) that keeps working until the objective is judged complete. See [tawx-harness](https://github.com/tawgroup/tawx-harness).
+After installing, click the agent's button in the sidebar (or press its shortcut) to start a session in the active folder. Sessions are restored on the next launch (`claude --resume`, `codex resume --last`, `pi --continue`).
 
 ## Quick Start (from source)
 
@@ -86,7 +83,7 @@ The sidebar footer estimates today's Claude Code and Codex usage from local logs
 - **Date grouping** — entries are grouped by **local** calendar date (matching `ccusage daily`'s default), not UTC.
 - **De-duplication** — duplicated Claude Code rows are counted once by `message.id + requestId`; rows missing either ID are still counted because they cannot be proven duplicates.
 - **Tokens** — total includes input, output, cache-creation, and cache-read tokens. Cache reads typically dominate (often 95%+), so the headline token count is large by nature.
-- **Pricing** — fetched live from [LiteLLM's price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) (the same source `ccusage` uses), cached to `~/.taw-terminal/pricing-cache.json` for 24h with an offline fallback snapshot. This matters: hardcoded prices previously read ~4× high because legacy Opus-4.1 rates were applied to the much cheaper Opus-4.8. Cost is an estimate, not an official bill.
+- **Pricing** — fetched live from [LiteLLM's price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) (the same source `ccusage` uses), cached to `~/.thaoterminal/pricing-cache.json` for 24h with an offline fallback snapshot. This matters: hardcoded prices previously read ~4× high because legacy Opus-4.1 rates were applied to the much cheaper Opus-4.8. Cost is an estimate, not an official bill.
 
 ## Keyboard Shortcuts
 
@@ -101,7 +98,6 @@ The sidebar footer estimates today's Claude Code and Codex usage from local logs
 | `Cmd+Shift+C` | New Claude Code session |
 | `Cmd+Shift+X` | New Codex session |
 | `Cmd+Shift+P` | New PI session |
-| `Cmd+Shift+A` | New tawx session |
 | `Cmd+1`–`Cmd+9` | Jump to the Nth terminal |
 
 All agent/terminal shortcuts are configurable in the in-app keybindings settings.

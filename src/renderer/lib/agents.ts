@@ -4,7 +4,7 @@
  * shortcut. The plain shell is always available and not listed here.
  * State is persisted to localStorage. Default: all enabled.
  */
-export type AgentKind = 'claude' | 'codex' | 'pi' | 'tawx'
+export type AgentKind = 'claude' | 'codex' | 'pi'
 
 export interface AgentMeta {
   id: AgentKind
@@ -14,8 +14,7 @@ export interface AgentMeta {
 export const AGENTS: AgentMeta[] = [
   { id: 'claude', label: 'Claude' },
   { id: 'codex', label: 'Codex' },
-  { id: 'pi', label: 'PI' },
-  { id: 'tawx', label: 'tawx' }
+  { id: 'pi', label: 'PI' }
 ]
 
 export type AgentState = Record<AgentKind, boolean>

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
-# TawTerminal installer.
-#   curl -fsSL https://raw.githubusercontent.com/tawgroup/taw-terminal/main/install.sh | bash
+# ThaoTerminal installer.
+#   curl -fsSL https://raw.githubusercontent.com/thaophamce/thaoterminal/main/install.sh | bash
 #
-# Downloads the latest GitHub release, installs TawTerminal.app into
+# Downloads the latest GitHub release, installs ThaoTerminal.app into
 # /Applications, strips the Gatekeeper quarantine flag, and launches it.
 set -euo pipefail
 
-REPO="tawgroup/taw-terminal"
-APP="TawTerminal"
+REPO="thaophamce/thaoterminal"
+APP="ThaoTerminal"
 
 say() { printf "\033[1m%s\033[0m\n" "$*"; }
 
 if [ "$(uname -s)" != "Darwin" ]; then
-  echo "TawTerminal is macOS-only." >&2
+  echo "ThaoTerminal is macOS-only." >&2
   exit 1
 fi
 

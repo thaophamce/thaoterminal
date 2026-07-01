@@ -1,8 +1,8 @@
 /**
- * TawTerminal - Main Process
+ * ThaoTerminal - Main Process
  * Electron app entry point
  */
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 import { join } from 'path'
 import os from 'os'
 import fs from 'fs'
@@ -12,18 +12,25 @@ import { getLimits } from './limits'
 import { terminalRegistry } from './terminal-registry'
 import { RemoteServer, resolveCloudflared, type RpcTable } from './remote-server'
 
+// Some Windows GPU drivers crash Chromium's hardware compositor on startup
+// (native 0xc0000409/BEX64 fault, window never shows). Disabling GPU
+// acceleration avoids it; the terminal UI has no need for GPU rendering.
+app.disableHardwareAcceleration()
+
 const ptyManager = new PtyManager()
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
   const isMac = process.platform === 'darwin'
+  const isWin = process.platform === 'win32'
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 600,
     minHeight: 400,
-    titleBarStyle: isMac ? 'hiddenInset' : 'default',
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     ...(isMac ? { trafficLightPosition: { x: 12, y: 12 } } : {}),
+    ...(isWin ? { titleBarOverlay: { color: '#1a1b26', symbolColor: '#a9b1d6', height: 38 } } : {}),
     backgroundColor: '#1a1b26',
     show: false,
     webPreferences: {
@@ -50,7 +57,7 @@ function createWindow(): void {
 
 // --- IPC Handlers ---
 
-interface TermMeta { name?: string; kind?: 'shell' | 'claude' | 'codex' | 'pi' | 'tawx'; workspacePath?: string }
+interface TermMeta { name?: string; kind?: 'shell' | 'claude' | 'codex' | 'pi'; workspacePath?: string }
 
 ipcMain.handle('terminal:create', (_, id: string, cwd?: string, meta?: TermMeta) => {
   terminalRegistry.register({ id, cwd: cwd || '', name: meta?.name, kind: meta?.kind, workspacePath: meta?.workspacePath })
@@ -119,7 +126,29 @@ ipcMain.handle('app:saveImage', async (_event, dataUrl: string) => {
 
 ipcMain.handle('app:getVersion', () => app.getVersion())
 
-const REPO = 'tawgroup/taw-terminal'
+ipcMain.handle('app:setTitleBarOverlay', (_, opts: { color: string; symbolColor: string }) => {
+  if (process.platform === 'win32' && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setTitleBarOverlay(opts)
+  }
+})
+
+ipcMain.handle('app:minimize', () => mainWindow?.minimize())
+
+ipcMain.handle('app:toggleMaximize', () => {
+  if (!mainWindow) return
+  if (mainWindow.isMaximized()) mainWindow.unmaximize()
+  else mainWindow.maximize()
+})
+
+ipcMain.handle('app:closeWindow', () => mainWindow?.close())
+
+ipcMain.handle('app:quit', () => app.quit())
+
+ipcMain.handle('app:copy', () => mainWindow?.webContents.copy())
+
+ipcMain.handle('app:paste', () => mainWindow?.webContents.paste())
+
+const REPO = 'thaophamce/thaoterminal'
 
 function cmpSemver(a: string, b: string): number {
   const pa = a.split('.').map(n => parseInt(n) || 0)
@@ -135,7 +164,7 @@ async function checkUpdate() {
   const current = app.getVersion()
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'TawTerminal' }
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'ThaoTerminal' }
     })
     if (!res.ok) return { current, latest: null, hasUpdate: false }
     const data = (await res.json()) as { tag_name?: string }
@@ -169,9 +198,9 @@ ipcMain.handle('app:runUpdate', async () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     await dialog.showMessageBox(mainWindow, {
       type: 'info',
-      message: 'Updating TawTerminal…',
+      message: 'Updating ThaoTerminal…',
       detail:
-        'TawTerminal will close now and reopen automatically once the new version finishes downloading (about 10–20 seconds).\n\nPlease don\'t reopen it yourself — it will come back on its own.',
+        'ThaoTerminal will close now and reopen automatically once the new version finishes downloading (about 10–20 seconds).\n\nPlease don\'t reopen it yourself — it will come back on its own.',
       buttons: ['OK'],
       defaultId: 0,
       noLink: true
@@ -256,7 +285,7 @@ ipcMain.handle('git:branch', (_, cwd: string) => gitBranchOf(cwd))
 // is actually $5/$25/$0.5 (verified against LiteLLM + ccusage, 2026-06-21).
 type Price4 = [number, number, number, number]
 const PRICING_URL = 'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json'
-const PRICING_CACHE = join(os.homedir(), '.taw-terminal', 'pricing-cache.json')
+const PRICING_CACHE = join(os.homedir(), '.thaoterminal', 'pricing-cache.json')
 
 // Offline fallback snapshot (LiteLLM, verified 2026-06-21). Keyed by exact model id.
 const CLAUDE_PRICING_FALLBACK: Record<string, Price4> = {
@@ -310,7 +339,7 @@ async function refreshPricing(): Promise<void> {
     if (Object.keys(map).length) {
       livePricing = map
       try {
-        fs.mkdirSync(join(os.homedir(), '.taw-terminal'), { recursive: true })
+        fs.mkdirSync(join(os.homedir(), '.thaoterminal'), { recursive: true })
         fs.writeFileSync(PRICING_CACHE, JSON.stringify({ fetchedAt: Date.now(), map }))
       } catch { /* cache write best-effort */ }
     }
@@ -512,7 +541,7 @@ function findTotalUsage(obj: any): any {
 // PI writes one JSONL line per message with usage ALREADY priced
 // (message.usage.cost.total in USD), so we just sum it — no pricing table.
 // Sessions live in ~/.pi/agent/sessions/** and, when launched from this app via
-// `--session-dir`, in ~/.taw-terminal/pi/**.
+// `--session-dir`, in ~/.thaoterminal/pi/**.
 type DatedUsage = { date: string; tokens: number; cost: number; input: number; output: number }
 const piUsageFileCache = new Map<string, { mtime: number; size: number; entries: DatedUsage[] }>()
 
@@ -543,7 +572,7 @@ function parsePiUsageFile(file: string, st: fs.Stats): DatedUsage[] {
 
 function piUsageToday(today: string): UsageStat {
   const total = emptyStat()
-  const roots = [join(os.homedir(), '.pi', 'agent', 'sessions'), join(os.homedir(), '.taw-terminal', 'pi')]
+  const roots = [join(os.homedir(), '.pi', 'agent', 'sessions'), join(os.homedir(), '.thaoterminal', 'pi')]
   const files: string[] = []
   for (const r of roots) walkJsonl(r, files)
   const startOfToday = new Date(today + 'T00:00:00').getTime()
@@ -559,52 +588,6 @@ function piUsageToday(today: string): UsageStat {
   return total
 }
 
-// --- tawx usage -----------------------------------------------------------
-// tawx persists a `usage` array per session JSON (~/.tawx/sessions/*.json), each
-// entry { ts, input, output, tokens, cost, model } — cost in USD, pre-computed by
-// the provider. Sessions written by older tawx (no `usage`) simply contribute 0.
-const tawxUsageFileCache = new Map<string, { mtime: number; size: number; entries: DatedUsage[] }>()
-
-function tawxUsageToday(today: string): UsageStat {
-  const total = emptyStat()
-  const dir = join(os.homedir(), '.tawx', 'sessions')
-  let names: string[] = []
-  try { names = fs.readdirSync(dir).filter((f) => f.endsWith('.json')) } catch { return total }
-  const startOfToday = new Date(today + 'T00:00:00').getTime()
-  for (const name of names) {
-    const file = join(dir, name)
-    let st: fs.Stats
-    try { st = fs.statSync(file) } catch { continue }
-    if (st.mtimeMs < startOfToday) continue
-    const cached = tawxUsageFileCache.get(file)
-    let entries: DatedUsage[]
-    if (cached && cached.mtime === st.mtimeMs && cached.size === st.size) {
-      entries = cached.entries
-    } else {
-      entries = []
-      try {
-        const j = JSON.parse(fs.readFileSync(file, 'utf8'))
-        for (const u of (Array.isArray(j.usage) ? j.usage : [])) {
-          if (!u || typeof u.ts !== 'string') continue
-          entries.push({
-            date: localDateKey(new Date(u.ts)),
-            tokens: u.tokens || 0,
-            cost: u.cost || 0,
-            input: u.input || 0,
-            output: u.output || 0
-          })
-        }
-      } catch { /* skip unreadable */ }
-      tawxUsageFileCache.set(file, { mtime: st.mtimeMs, size: st.size, entries })
-    }
-    for (const e of entries) {
-      if (e.date !== today) continue
-      total.tokens += e.tokens; total.cost += e.cost; total.input += e.input; total.output += e.output
-    }
-  }
-  return total
-}
-
 function usageSnapshot() {
   const now = new Date()
   // Group by LOCAL calendar date, matching `ccusage daily`'s default.
@@ -613,11 +596,10 @@ function usageSnapshot() {
     return {
       claude: claudeUsageToday(claudeToday),
       codex: codexUsageToday(now),
-      pi: piUsageToday(claudeToday),
-      tawx: tawxUsageToday(claudeToday)
+      pi: piUsageToday(claudeToday)
     }
   } catch {
-    return { claude: emptyStat(), codex: emptyStat(), pi: emptyStat(), tawx: emptyStat() }
+    return { claude: emptyStat(), codex: emptyStat(), pi: emptyStat() }
   }
 }
 ipcMain.handle('usage:get', () => usageSnapshot())
@@ -708,6 +690,10 @@ ipcMain.handle('remote:stop', async () => { await getRemoteServer().stop(); retu
 let isQuitting = false
 
 app.whenReady().then(() => {
+  // Remove native menu bar on Windows so the themed React titlebar is the only header
+  if (process.platform !== 'darwin') {
+    Menu.setApplicationMenu(null)
+  }
   createWindow()
 })
 

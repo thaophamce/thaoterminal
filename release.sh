@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# TawTerminal release script.
+# ThaoTerminal release script.
 #
 #   ./release.sh            # bump patch  (0.2.2 -> 0.2.3), build, publish
 #   ./release.sh minor      # bump minor  (0.2.2 -> 0.3.0)
@@ -56,8 +56,8 @@ else
 fi
 
 TAG="v$VER"
-DMG="dist/TawTerminal-${VER}-arm64.dmg"
-ZIP="dist/TawTerminal-${VER}-arm64-mac.zip"
+DMG="dist/ThaoTerminal-${VER}-arm64.dmg"
+ZIP="dist/ThaoTerminal-${VER}-arm64-mac.zip"
 
 # Abort if this tag already exists on the remote (avoid clobbering a release).
 if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
@@ -73,7 +73,7 @@ npm run dist
 [ -f "$ZIP" ] || die "Expected zip not found: $ZIP"
 
 # Sanity: confirm Gatekeeper accepts the freshly built app.
-APP="dist/mac-arm64/TawTerminal.app"
+APP="dist/mac-arm64/ThaoTerminal.app"
 if [ -d "$APP" ]; then
   spctl -a -vvv -t install "$APP" >/dev/null 2>&1 \
     && bold "✓ Gatekeeper: notarized & accepted" \
@@ -86,7 +86,7 @@ if [ "$ARG" != "--no-bump" ]; then
   git add package.json package-lock.json
   git commit -m "release: $TAG" >/dev/null
 fi
-git tag -a "$TAG" -m "TawTerminal $TAG"
+git tag -a "$TAG" -m "ThaoTerminal $TAG"
 bold "Pushing commit + tag…"
 git push origin HEAD
 git push origin "$TAG"
@@ -101,17 +101,17 @@ done
 
 bold "Creating GitHub Release $TAG with ${#ASSETS[@]} assets…"
 gh release create "$TAG" "${ASSETS[@]}" \
-  --title "TawTerminal $TAG" \
+  --title "ThaoTerminal $TAG" \
   --generate-notes
 
 # --- Done --------------------------------------------------------------------
 
 echo
 bold "✅ Released $TAG"
-echo "   GitHub:  https://github.com/tawgroup/taw-terminal/releases/tag/$TAG"
+echo "   GitHub:  https://github.com/thaophamce/thaoterminal/releases/tag/$TAG"
 echo
 bold "👉 Last manual step: update the file on Gumroad"
-echo "   1. https://gumroad.com/products  ->  TawTerminal  ->  Content tab"
+echo "   1. https://gumroad.com/products  ->  ThaoTerminal  ->  Content tab"
 echo "   2. Remove the old DMG, upload:  $DMG"
 echo "   3. Save changes"
 echo

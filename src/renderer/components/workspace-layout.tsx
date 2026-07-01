@@ -7,13 +7,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { TerminalInstance } from './terminal-instance'
 import { WorkspaceSidebar, Workspace, Term, TermKind } from './workspace-sidebar'
-import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, TawxIcon, GearIcon } from './icons'
+import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon } from './icons'
 import type { UsageSnapshot, LimitsSnapshot, UpdateInfo } from '../../preload/index.d'
 import { KeybindingsModal } from './keybindings-modal'
 import { UpdateModal } from './update-modal'
 import { RemoteModal } from './remote-modal'
 import { Binding, loadBindings, saveBindings, eventToCombo } from '../lib/keybindings'
 import { AgentKind, AgentState, loadEnabledAgents, saveEnabledAgents, resetEnabledAgents } from '../lib/agents'
+import type { MenuActions } from './menu-bar'
 
 let termCounter = 0
 const nextTermId = () => `term-${++termCounter}`
@@ -25,9 +26,10 @@ const MOUSE_RESET = "; printf '\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\
 
 interface Props {
   onImagePaste?: (dataUrl: string) => void
+  menuActionsRef?: React.MutableRefObject<MenuActions>
 }
 
-export function WorkspaceLayout({ onImagePaste }: Props) {
+export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [busy, setBusy] = useState<Set<string>>(new Set())
@@ -98,19 +100,11 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
       // its own session dir so a fresh `pi` saves there and restore can
       // `--continue` exactly that terminal's session.
       const sessionId = crypto.randomUUID()
-      const dir = `~/.taw-terminal/pi/${sessionId}`
+      const dir = `~/.thaoterminal/pi/${sessionId}`
       term = {
         id, cwd: path, kind: 'pi', sessionId,
         name: `PI ${termCounter}`,
         initialCommand: `mkdir -p ${dir} && pi --session-dir ${dir}${MOUSE_RESET}`
-      }
-    } else if (kind === 'tawx') {
-      // tawx generates its own timestamped session id (no pre-assign, like Codex),
-      // so restore uses `tawx resume` (newest session). tawx auto-approves by default.
-      term = {
-        id, cwd: path, kind: 'tawx',
-        name: `tawx ${termCounter}`,
-        initialCommand: `tawx${MOUSE_RESET}`
       }
     } else {
       term = { id, cwd: path, kind: 'shell', name: `Terminal ${termCounter}` }
@@ -141,6 +135,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         ws = saved.workspaces.map(w => ({
           id: w.path,
           path: w.path,
+          label: w.label,
           collapsed: !!w.collapsed,
           branch: null,
           terminals: (w.terminals || []).map(t => {
@@ -169,18 +164,11 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
             if (t.kind === 'pi' && t.claudeSessionId) {
               // Continue the session stored in this terminal's own pi session dir
               const sid = t.claudeSessionId
-              const dir = `~/.taw-terminal/pi/${sid}`
+              const dir = `~/.thaoterminal/pi/${sid}`
               return {
                 id, name: t.name, cwd, kind: 'pi' as const,
                 sessionId: sid, ...note,
                 initialCommand: `mkdir -p ${dir} && pi --session-dir ${dir} --continue${MOUSE_RESET}`
-              }
-            }
-            if (t.kind === 'tawx') {
-              // tawx has no fixed id; resume the most recent session (like Codex)
-              return {
-                id, name: t.name, cwd, kind: 'tawx' as const, ...note,
-                initialCommand: `tawx resume${MOUSE_RESET}`
               }
             }
             return { id, name: t.name, cwd, kind: 'shell' as const, ...note }
@@ -220,6 +208,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
       active: w && t ? { path: w.path, name: t.name } : undefined,
       workspaces: workspaces.map(ws => ({
         path: ws.path,
+        label: ws.label,
         collapsed: ws.collapsed,
         terminals: ws.terminals.map(t => ({ name: t.name, cwd: t.cwd, kind: t.kind, claudeSessionId: t.sessionId, note: t.note, noteOpen: t.noteOpen }))
       }))
@@ -291,6 +280,10 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
     window.terminal.rename?.(termId, name)
   }, [])
 
+  const renameFolder = useCallback((wsId: string, label: string) => {
+    setWorkspaces(prev => prev.map(w => (w.id === wsId ? { ...w, label: label || undefined } : w)))
+  }, [])
+
   // --- sticky note: edit content / toggle the note panel for a terminal ---
   const updateNote = useCallback((termId: string, note: string) => {
     setWorkspaces(prev => prev.map(w => ({
@@ -339,27 +332,40 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   }, [])
 
   // Show a guide: copy the install command, run it in a terminal, then quit +
-  // reopen TawTerminal. We don't self-update silently anymore.
+  // reopen ThaoTerminal. We don't self-update silently anymore.
   const doUpdate = useCallback(() => setShowUpdateGuide(true), [])
+
+  // --- action dispatcher: shared by keyboard shortcuts and the menu bar ---
+  const runAction = useCallback((actionId: string) => {
+    const ws = activeWorkspace || workspaces[0]
+    switch (actionId) {
+      case 'newTerminal': if (ws) spawnTerminal(ws.id, ws.path, 'shell'); break
+      case 'newClaude': if (ws && agents.claude) spawnTerminal(ws.id, ws.path, 'claude'); break
+      case 'newCodex': if (ws && agents.codex) spawnTerminal(ws.id, ws.path, 'codex'); break
+      case 'newPi': if (ws && agents.pi) spawnTerminal(ws.id, ws.path, 'pi'); break
+      case 'addFolder': addFolder(); break
+      case 'closeTerminal': if (activeId) removeTerminal(activeId); break
+      case 'toggleSidebar': setSidebarHidden(h => !h); break
+    }
+  }, [activeWorkspace, workspaces, agents, activeId, spawnTerminal, addFolder, removeTerminal])
+
+  // --- keep the menu-bar action bridge in sync (no deps: cheap, ref write only) ---
+  useEffect(() => {
+    if (!menuActionsRef) return
+    menuActionsRef.current = {
+      run: runAction,
+      openKeybindings: () => setShowKeybindings(true),
+      checkForUpdates: doUpdate,
+      viewReleases: openReleases,
+      agents,
+      bindings
+    }
+  })
 
   // --- keyboard shortcuts ---
   useEffect(() => {
     const comboMap: Record<string, string> = {}
     bindings.forEach(b => { comboMap[b.combo] = b.id })
-
-    const run = (actionId: string) => {
-      const ws = activeWorkspace || workspaces[0]
-      switch (actionId) {
-        case 'newTerminal': if (ws) spawnTerminal(ws.id, ws.path, 'shell'); break
-        case 'newClaude': if (ws && agents.claude) spawnTerminal(ws.id, ws.path, 'claude'); break
-        case 'newCodex': if (ws && agents.codex) spawnTerminal(ws.id, ws.path, 'codex'); break
-        case 'newPi': if (ws && agents.pi) spawnTerminal(ws.id, ws.path, 'pi'); break
-        case 'newTawx': if (ws && agents.tawx) spawnTerminal(ws.id, ws.path, 'tawx'); break
-        case 'addFolder': addFolder(); break
-        case 'closeTerminal': if (activeId) removeTerminal(activeId); break
-        case 'toggleSidebar': setSidebarHidden(h => !h); break
-      }
-    }
 
     const handler = (e: KeyboardEvent) => {
       const isMeta = e.metaKey || e.ctrlKey
@@ -373,15 +379,15 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
       }
       // ⌘N: fixed alias for new terminal
       if (isMeta && !e.shiftKey && !e.altKey && e.key === 'n') {
-        e.preventDefault(); run('newTerminal'); return
+        e.preventDefault(); runAction('newTerminal'); return
       }
       // configurable bindings
       const action = comboMap[eventToCombo(e)]
-      if (action) { e.preventDefault(); run(action) }
+      if (action) { e.preventDefault(); runAction(action) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [bindings, agents, activeWorkspace, workspaces, activeId, spawnTerminal, removeTerminal, addFolder])
+  }, [bindings, workspaces, runAction])
 
   const rebind = useCallback((id: string, combo: string) => {
     setBindings(prev => {
@@ -422,8 +428,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!resizingRef.current) return
-      // sidebar starts after the 48px activity rail
-      setSidebarWidth(Math.min(640, Math.max(220, e.clientX - 48)))
+      setSidebarWidth(Math.min(640, Math.max(220, e.clientX)))
     }
     const onUp = () => { resizingRef.current = false }
     window.addEventListener('mousemove', onMove)
@@ -442,28 +447,6 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
 
   return (
     <div className="workspace-root" style={{ ['--sidebar-w' as string]: `${sidebarWidth}px` }}>
-      {/* Activity rail */}
-      <div className="ws-rail">
-        <div className="rail-ic logo">{'>_'}</div>
-        <button
-          className={`rail-toggle ${sidebarHidden ? '' : 'active'}`}
-          title={sidebarHidden ? 'Show sidebar (Ctrl+B)' : 'Hide sidebar (Ctrl+B)'}
-          onClick={() => setSidebarHidden(h => !h)}
-        >
-          <span className="rt-ic">◧</span>
-          <span className="rt-kbd">Ctrl+B</span>
-        </button>
-        <div className="rail-spacer" />
-        <button className="rail-settings" title="Remote access (control from your phone)" onClick={() => setShowRemote(true)}>
-          <span className="rs-ic">📱</span>
-          <span className="rs-label">Remote</span>
-        </button>
-        <button className="rail-settings" title="Settings (agents & shortcuts)" onClick={() => setShowKeybindings(true)}>
-          <span className="rs-ic"><GearIcon size={22} /></span>
-          <span className="rs-label">Settings</span>
-        </button>
-      </div>
-
       {showKeybindings && (
         <KeybindingsModal
           bindings={bindings}
@@ -518,14 +501,11 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
           const ws = workspaces.find(w => w.id === wsId)
           if (ws) spawnTerminal(ws.id, ws.path, 'pi')
         }}
-        onAddTawx={(wsId) => {
-          const ws = workspaces.find(w => w.id === wsId)
-          if (ws) spawnTerminal(ws.id, ws.path, 'tawx')
-        }}
         agents={agents}
         onSelectTerminal={setActiveId}
         onCloseTerminal={removeTerminal}
         onRenameTerminal={renameTerminal}
+        onRenameFolder={renameFolder}
         usage={usage}
         limits={limits}
         version={version}
@@ -533,6 +513,9 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
         onOpenReleases={openReleases}
         onUpdate={doUpdate}
         hotkeyIndex={hotkeyIndex}
+        onOpenRemote={() => setShowRemote(true)}
+        onOpenSettings={() => setShowKeybindings(true)}
+        onToggleSidebar={() => setSidebarHidden(h => !h)}
       />}
 
       {/* Drag to resize the sidebar */}
@@ -557,7 +540,7 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
               onClick={() => setActiveId(t.id)}
             >
               <span className={`ws-tab-ic ${t.kind}`}>
-                {t.kind === 'claude' ? <ClaudeIcon size={13} /> : t.kind === 'codex' ? <CodexIcon size={13} /> : t.kind === 'pi' ? <PiIcon size={13} /> : t.kind === 'tawx' ? <TawxIcon size={13} /> : <TerminalIcon size={13} />}
+                {t.kind === 'claude' ? <ClaudeIcon size={13} /> : t.kind === 'codex' ? <CodexIcon size={13} /> : t.kind === 'pi' ? <PiIcon size={13} /> : <TerminalIcon size={13} />}
               </span>
               <span>{t.name}</span>
               <button className="ws-tab-x" title="Close terminal (Ctrl+W)" onClick={(e) => { e.stopPropagation(); removeTerminal(t.id) }}>×</button>
@@ -585,11 +568,6 @@ export function WorkspaceLayout({ onImagePaste }: Props) {
                 title="New PI session"
                 onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path, 'pi')}
               ><PiIcon size={14} /></button>}
-              {agents.tawx && <button
-                className="ws-tab-add tawx"
-                title="New tawx session"
-                onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path, 'tawx')}
-              ><TawxIcon size={14} /></button>}
             </>
           )}
         </div>

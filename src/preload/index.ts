@@ -32,7 +32,16 @@ contextBridge.exposeInMainWorld('app', {
   releasesUrl: () => ipcRenderer.invoke('app:releasesUrl'),
   runUpdate: () => ipcRenderer.invoke('app:runUpdate'),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
-  saveImage: (dataUrl: string) => ipcRenderer.invoke('app:saveImage', dataUrl)
+  saveImage: (dataUrl: string) => ipcRenderer.invoke('app:saveImage', dataUrl),
+  setTitleBarOverlay: (opts: { color: string; symbolColor: string }) =>
+    ipcRenderer.invoke('app:setTitleBarOverlay', opts),
+  minimize: () => ipcRenderer.invoke('app:minimize'),
+  toggleMaximize: () => ipcRenderer.invoke('app:toggleMaximize'),
+  closeWindow: () => ipcRenderer.invoke('app:closeWindow'),
+  quit: () => ipcRenderer.invoke('app:quit'),
+  copy: () => ipcRenderer.invoke('app:copy'),
+  paste: () => ipcRenderer.invoke('app:paste'),
+  platform: process.platform
 })
 
 contextBridge.exposeInMainWorld('workspace', {
