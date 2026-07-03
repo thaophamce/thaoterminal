@@ -32,7 +32,16 @@ export function resolveCloudflared(): string | null {
   const isWin = process.platform === 'win32'
   const bin = isWin ? 'cloudflared.exe' : 'cloudflared'
   const sep = isWin ? ';' : ':'
-  const extraDirs = isWin ? [] : ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/opt/local/bin']
+  // winget installs to Program Files (x86)\cloudflared and only patches the
+  // registry PATH — an already-running app inherits the stale one, so scan
+  // the well-known install dirs too (mirrors the Homebrew case on macOS).
+  const extraDirs = isWin
+    ? [
+        process.env['ProgramFiles(x86)'] && join(process.env['ProgramFiles(x86)'], 'cloudflared'),
+        process.env.ProgramFiles && join(process.env.ProgramFiles, 'cloudflared'),
+        process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links')
+      ].filter((d): d is string => !!d)
+    : ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/opt/local/bin']
   const dirs = [...(process.env.PATH || '').split(sep), ...extraDirs]
   for (const d of dirs) {
     if (!d) continue
@@ -309,18 +318,21 @@ export class RemoteServer {
   // --- Tunnel (cloudflared quick tunnel) ---
 
   private startTunnel(): Promise<void> {
+    const NOT_INSTALLED = process.platform === 'win32'
+      ? 'cloudflared not installed. Install it (winget install Cloudflare.cloudflared) for off-network access.'
+      : 'cloudflared not installed. Install it (brew install cloudflared) for off-network access.'
     return new Promise((resolve) => {
       this.tunnelError = null
       const bin = resolveCloudflared()
       if (!bin) {
-        this.tunnelError = 'cloudflared not installed. Install it (brew install cloudflared) for off-network access.'
+        this.tunnelError = NOT_INSTALLED
         return resolve()
       }
       let child: ChildProcess
       try {
         child = spawn(bin, ['tunnel', '--no-autoupdate', '--url', `http://localhost:${this.port}`])
       } catch {
-        this.tunnelError = 'cloudflared not installed. Install it (brew install cloudflared) for off-network access.'
+        this.tunnelError = NOT_INSTALLED
         return resolve()
       }
       this.tunnel = child
@@ -333,7 +345,7 @@ export class RemoteServer {
       child.stdout?.on('data', onLine)
       child.stderr?.on('data', onLine)
       child.on('error', () => {
-        this.tunnelError = 'cloudflared not installed. Install it (brew install cloudflared) for off-network access.'
+        this.tunnelError = NOT_INSTALLED
         finish()
       })
       child.on('exit', () => { this.tunnel = null })
