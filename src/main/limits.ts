@@ -295,18 +295,28 @@ async function refreshCodex(creds: CodexCreds): Promise<CodexCreds> {
     lastRefresh: Date.now()
   }
   // Persist refreshed tokens back so the Codex CLI keeps working too.
+  // Re-read the file first: the Codex CLI may itself have refreshed while our
+  // request was in flight (OAuth refresh tokens rotate — clobbering a newer
+  // rotation would sign the user out). Only persist if the file still holds
+  // the refresh token we started from, and write atomically (temp + rename)
+  // so a crash mid-write can't corrupt the CLI's credential store.
   try {
     const authPath = join(codexHome(), 'auth.json')
     const existing = JSON.parse(fs.readFileSync(authPath, 'utf8'))
-    existing.tokens = {
-      ...(existing.tokens || {}),
-      access_token: next.accessToken,
-      refresh_token: next.refreshToken,
-      ...(next.idToken ? { id_token: next.idToken } : {}),
-      ...(next.accountId ? { account_id: next.accountId } : {})
+    const onDiskRefresh = existing?.tokens?.refresh_token
+    if (!onDiskRefresh || onDiskRefresh === creds.refreshToken) {
+      existing.tokens = {
+        ...(existing.tokens || {}),
+        access_token: next.accessToken,
+        refresh_token: next.refreshToken,
+        ...(next.idToken ? { id_token: next.idToken } : {}),
+        ...(next.accountId ? { account_id: next.accountId } : {})
+      }
+      existing.last_refresh = new Date().toISOString()
+      const tmp = authPath + '.tmp'
+      fs.writeFileSync(tmp, JSON.stringify(existing, null, 2))
+      fs.renameSync(tmp, authPath)
     }
-    existing.last_refresh = new Date().toISOString()
-    fs.writeFileSync(authPath, JSON.stringify(existing, null, 2))
   } catch { /* best-effort persistence */ }
   return next
 }

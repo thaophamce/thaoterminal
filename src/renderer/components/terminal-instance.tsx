@@ -1,6 +1,6 @@
 /**
  * Single terminal instance - xterm.js with addons
- * Handles image paste, WebGL rendering, web links
+ * Handles image paste and web links
  */
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
@@ -30,6 +30,21 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
   const { xtermTheme } = useTheme()
   const [showScrollDown, setShowScrollDown] = useState(false)
 
+  // Last size we actually pushed to the PTY. Re-asserting the SAME size still
+  // fires a resize signal down to the shell — on Windows (ConPTY) that makes
+  // Ink-based TUIs (Claude Code, Codex) redraw their whole screen. With several
+  // independent triggers here (focus, tab switch, ResizeObserver) all able to
+  // fire in close succession without an actual size change, those redraws can
+  // overlap and land as duplicated/misaligned text. Only forward a resize when
+  // cols/rows genuinely changed.
+  const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
+  const pushResize = useCallback((cols: number, rows: number, force = false) => {
+    const last = lastSizeRef.current
+    if (!force && last && last.cols === cols && last.rows === rows) return
+    lastSizeRef.current = { cols, rows }
+    window.terminal.resize(id, cols, rows)
+  }, [id])
+
   const scrollToBottom = useCallback(() => {
     terminalRef.current?.scrollToBottom()
     terminalRef.current?.focus()
@@ -44,15 +59,18 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
   // the desktop stays squeezed at the phone's width — the program reflows to
   // ~40 cols and everything crams into the left half. Only the active terminal
   // is laid out (others are display:none → a fit would compute 0), so guard it.
+  // Forced: the PTY's actual size may have been changed by the OTHER client
+  // (the phone) without our local cols/rows changing, so the dedupe in
+  // pushResize would otherwise skip re-asserting it.
   const reassertSize = useCallback(() => {
     if (!isActiveRef.current) return
     requestAnimationFrame(() => {
       if (!isActiveRef.current || !fitAddonRef.current || !terminalRef.current) return
       fitAddonRef.current.fit()
       const { cols, rows } = terminalRef.current
-      window.terminal.resize(id, cols, rows)
+      pushResize(cols, rows, true)
     })
-  }, [id])
+  }, [pushResize])
 
   // Initialize terminal once
   useEffect(() => {
@@ -69,7 +87,7 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
       fontWeight: '500',
       lineHeight: 1.3,
       letterSpacing: 0,
-      scrollback: 10000,
+      scrollback: 100000,
       allowProposedApi: true,
       theme: xtermTheme
     })
@@ -90,6 +108,9 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
     //           fires a paste event instead, which xterm's internal listener handles.
     // Ctrl+C — if text is selected, copy it; otherwise fall through so xterm sends
     //           ^C (SIGINT) to the PTY as normal.
+    // Shift+Enter — xterm sends plain \r for this exactly like a bare Enter, so
+    //           CLI TUIs (Claude Code, Codex) can't tell "newline" from "submit".
+    //           Send ESC+CR instead, the sequence those CLIs treat as insert-newline.
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
         if (e.key === 'v') return false
@@ -98,6 +119,10 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
           if (sel) navigator.clipboard.writeText(sel)
           return false
         }
+      }
+      if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && e.key === 'Enter') {
+        if (e.type === 'keydown') window.terminal.write(id, '\x1b\r')
+        return false
       }
       return true
     })
@@ -146,7 +171,7 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
     setTimeout(() => {
       fitAddon.fit()
       const { cols, rows } = terminal
-      window.terminal.resize(id, cols, rows)
+      pushResize(cols, rows)
       if (isActive) terminal.focus()
     }, 150)
 
@@ -177,11 +202,13 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
       setTimeout(() => {
         fitAddonRef.current!.fit()
         const { cols, rows } = terminalRef.current!
-        window.terminal.resize(id, cols, rows)
+        // Forced: while this tab was hidden a remote phone client may have
+        // resized the shared PTY without our local cols/rows changing.
+        pushResize(cols, rows, true)
         terminalRef.current!.focus()
       }, 50)
     }
-  }, [isActive, id])
+  }, [isActive, id, pushResize])
 
   // Re-assert our size when the desktop window regains focus or a remote phone
   // client attaches/detaches (it shrinks the shared PTY to its screen size).
@@ -203,14 +230,14 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
         if (fitAddonRef.current && terminalRef.current) {
           fitAddonRef.current.fit()
           const { cols, rows } = terminalRef.current
-          window.terminal.resize(id, cols, rows)
+          pushResize(cols, rows)
         }
       })
     })
 
     resizeObserver.observe(containerRef.current)
     return () => resizeObserver.disconnect()
-  }, [isActive, id])
+  }, [isActive, id, pushResize])
 
   // Image paste — use capture on window so we intercept before xterm's internal
   // paste listener can call stopPropagation(). Only handle when this terminal is active.
@@ -248,6 +275,32 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
     window.addEventListener('paste', handler, true)
     return () => window.removeEventListener('paste', handler, true)
   }, [onImagePaste])
+
+  // Multi-line text paste into a plain shell tab — Windows PowerShell's console
+  // host (and most shells without bracketed-paste support) treats every embedded
+  // newline as an Enter press, executing each line the instant it lands. Later
+  // lines can then error or land in an unintended state (e.g. after a `cd`),
+  // which looks like the pasted text got cut off. Collapse it into one
+  // `;`-joined line instead so it runs as a single compound statement. Only for
+  // plain `shell` tabs — Claude Code/Codex/PI need literal multi-line text for
+  // their prompts, so leave those to xterm's normal (bracketed) paste handling.
+  useEffect(() => {
+    if (kind !== 'shell') return
+    const handler = (e: ClipboardEvent) => {
+      if (!isActiveRef.current) return
+      const items = e.clipboardData?.items
+      if (items && Array.from(items).some((item) => item.type.startsWith('image/'))) return
+      const text = e.clipboardData?.getData('text/plain')
+      if (!text) return
+      const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim()).filter(Boolean)
+      if (lines.length < 2) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      window.terminal.write(id, lines.join('; '))
+    }
+    window.addEventListener('paste', handler, true)
+    return () => window.removeEventListener('paste', handler, true)
+  }, [id, kind])
 
   // Drag and drop image
   const handleDrop = useCallback((e: React.DragEvent) => {

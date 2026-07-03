@@ -16,8 +16,8 @@ import http from 'http'
 import { createServer as createNetServer } from 'net'
 import { readFile } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join, normalize, extname } from 'path'
-import { randomBytes } from 'crypto'
+import { join, normalize, extname, sep } from 'path'
+import { randomBytes, timingSafeEqual } from 'crypto'
 import os from 'os'
 import { spawn, ChildProcess } from 'child_process'
 import { WebSocketServer, WebSocket } from 'ws'
@@ -67,8 +67,7 @@ const MIME: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.woff2': 'font/woff2',
   '.woff': 'font/woff',
-  '.ttf': 'font/ttf',
-  '.map': 'application/json; charset=utf-8'
+  '.ttf': 'font/ttf'
 }
 
 function lanIp(): string | null {
@@ -81,10 +80,13 @@ function lanIp(): string | null {
   return null
 }
 
-function freePort(start: number): Promise<number> {
-  return new Promise((resolve) => {
+function freePort(start: number, attemptsLeft = 100): Promise<number> {
+  return new Promise((resolve, reject) => {
     const srv = createNetServer()
-    srv.once('error', () => resolve(freePort(start + 1)))
+    srv.once('error', () => {
+      if (attemptsLeft <= 0) reject(new Error('No free port found.'))
+      else resolve(freePort(start + 1, attemptsLeft - 1))
+    })
     srv.listen(start, () => {
       const port = (srv.address() as { port: number }).port
       srv.close(() => resolve(port))
@@ -92,11 +94,22 @@ function freePort(start: number): Promise<number> {
   })
 }
 
+/** Constant-time token comparison — a plain `!==` leaks match length via timing. */
+function tokenMatches(candidate: string | null, expected: string | null): boolean {
+  if (!candidate || !expected) return false
+  const a = Buffer.from(candidate)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
+
 export class RemoteServer {
   private http: http.Server | null = null
   private wss: WebSocketServer | null = null
   private tunnel: ChildProcess | null = null
   private clients = new Set<WebSocket>()
+  /** Which terminal ids each client subscribed to (heavy `terminal:data` only goes there). */
+  private subs = new Map<WebSocket, Set<string>>()
   private token: string | null = null
   private port: number | null = null
   private tunnelUrl: string | null = null
@@ -131,7 +144,7 @@ export class RemoteServer {
 
     this.http.on('upgrade', (req, socket, head) => {
       const url = new URL(req.url || '/', 'http://localhost')
-      if (url.pathname !== '/ws' || url.searchParams.get('token') !== this.token) {
+      if (url.pathname !== '/ws' || !tokenMatches(url.searchParams.get('token'), this.token)) {
         socket.destroy()
         return
       }
@@ -140,8 +153,10 @@ export class RemoteServer {
 
     await new Promise<void>((resolve) => this.http!.listen(this.port!, '0.0.0.0', resolve))
 
-    // Fan registry events out to every connected client.
-    const onData = (p: unknown) => this.broadcast('terminal:data', p)
+    // Fan registry events out to connected clients. Raw output (`terminal:data`)
+    // only goes to clients that subscribed to that terminal — a phone viewing
+    // one session must not receive every byte of every other session.
+    const onData = (p: { id: string }) => this.broadcast('terminal:data', p, (ws) => this.subs.get(ws)?.has(p.id) === true)
     const onExit = (p: unknown) => this.broadcast('terminal:exit', p)
     const onMeta = () => this.broadcast('session:meta', terminalRegistry.list())
     terminalRegistry.on('data', onData)
@@ -200,7 +215,8 @@ export class RemoteServer {
 
   private async handleHttp(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url || '/', 'http://localhost')
-    if (url.searchParams.get('token') !== this.token) {
+    const hasToken = tokenMatches(url.searchParams.get('token'), this.token)
+    if (!hasToken) {
       // The SPA passes the token on first load; assets reuse it via the bridge.
       // Allow same-origin asset requests (no token) only after a valid page load
       // is impractical statelessly, so require the token on every request.
@@ -214,15 +230,22 @@ export class RemoteServer {
     let pathname = decodeURIComponent(url.pathname)
     // The phone gets the dedicated mobile client, not the desktop SPA.
     if (pathname === '/' || pathname === '') pathname = '/mobile.html'
-    // Prevent path traversal.
+    // Prevent path traversal. Require the separator so a sibling dir with the
+    // same prefix (e.g. `out-secrets` next to `out`) can't slip through.
+    const root = normalize(this.staticDir)
     const filePath = normalize(join(this.staticDir, pathname))
-    if (!filePath.startsWith(normalize(this.staticDir))) {
+    if (filePath !== root && !filePath.startsWith(root + sep)) {
       res.writeHead(403); res.end(); return
     }
 
     let target = filePath
     if (!existsSync(target)) {
-      // SPA fallback to the mobile entry.
+      // SPA fallback to the mobile entry — an HTML page, so it stays token-gated.
+      if (!hasToken) {
+        res.writeHead(403, { 'content-type': 'text/plain' })
+        res.end('Forbidden — invalid or missing token.')
+        return
+      }
       target = join(this.staticDir, 'mobile.html')
     }
     try {
@@ -244,14 +267,19 @@ export class RemoteServer {
 
   private onWsConnect(ws: WebSocket): void {
     this.clients.add(ws)
+    this.subs.set(ws, new Set())
     this.onClientsChange?.(this.clients.size)
     ws.on('close', () => {
       this.clients.delete(ws)
+      this.subs.delete(ws)
       this.onClientsChange?.(this.clients.size)
     })
     ws.on('message', async (raw) => {
-      let msg: { t: string; id?: number; method?: string; args?: unknown[] }
+      let msg: { t: string; id?: number; method?: string; args?: unknown[]; term?: string }
       try { msg = JSON.parse(raw.toString()) } catch { return }
+      // Lightweight sub/unsub protocol for terminal output streams.
+      if (msg.t === 'sub' && typeof msg.term === 'string') { this.subs.get(ws)?.add(msg.term); return }
+      if (msg.t === 'unsub' && typeof msg.term === 'string') { this.subs.get(ws)?.delete(msg.term); return }
       if (msg.t !== 'rpc' || !msg.method) return
       const fn = this.rpc[msg.method]
       if (!fn) {
@@ -269,10 +297,12 @@ export class RemoteServer {
     ws.send(JSON.stringify({ t: 'event', name: 'session:meta', payload: terminalRegistry.list() }))
   }
 
-  private broadcast(name: string, payload: unknown): void {
+  private broadcast(name: string, payload: unknown, filter?: (ws: WebSocket) => boolean): void {
     const data = JSON.stringify({ t: 'event', name, payload })
     for (const ws of this.clients) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(data)
+      if (ws.readyState !== WebSocket.OPEN) continue
+      if (filter && !filter(ws)) continue
+      ws.send(data)
     }
   }
 
@@ -318,6 +348,7 @@ export class RemoteServer {
       this.tunnel = null
     }
     this.tunnelUrl = null
+    this.tunnelError = null
   }
 
   private async refreshQr(): Promise<void> {

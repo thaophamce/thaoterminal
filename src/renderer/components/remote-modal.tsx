@@ -148,6 +148,10 @@ export function RemoteModal({ onClose }: Props) {
           <p className="rmt-sec">
             🔒 Anyone with this URL gets full shell control of this machine. The link carries a
             secret token; don't share it, and stop remote access when you're done.
+            {running && !status?.tunnelUrl && status?.lanUrl && (
+              <> Wi-Fi mode uses <b>unencrypted HTTP</b> — only use it on a network you trust
+              (others on the same network could read the traffic, including the token).</>
+            )}
           </p>
         </div>
       </div>

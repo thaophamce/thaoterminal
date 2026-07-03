@@ -13,6 +13,9 @@ export class RemoteClient {
   private listeners = new Map<string, Set<(payload: any) => void>>()
   private stateListeners = new Set<(s: ConnState) => void>()
   private closedByUser = false
+  /** Terminal ids we want raw output for; re-sent to the server on every (re)connect. */
+  private termSubs = new Set<string>()
+  private reconnectDelay = 1000
 
   constructor(private token: string) {}
 
@@ -26,13 +29,23 @@ export class RemoteClient {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(this.token)}`)
     this.ws = ws
-    ws.onopen = () => this.setState('open')
+    ws.onopen = () => {
+      this.reconnectDelay = 1000
+      // Restore output subscriptions lost with the previous socket.
+      for (const id of this.termSubs) ws.send(JSON.stringify({ t: 'sub', term: id }))
+      this.setState('open')
+    }
     ws.onclose = () => {
       this.setState('closed')
       // Reject in-flight calls so the UI doesn't hang.
       for (const { reject } of this.pending.values()) reject(new Error('disconnected'))
       this.pending.clear()
-      if (!this.closedByUser) setTimeout(() => this.open(), 1500)
+      if (!this.closedByUser) {
+        // Exponential backoff (1s → 15s cap) so a dead server isn't hammered.
+        const delay = this.reconnectDelay
+        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 15000)
+        setTimeout(() => this.open(), delay)
+      }
     }
     ws.onmessage = (ev) => {
       let msg: any
@@ -52,6 +65,16 @@ export class RemoteClient {
   close(): void {
     this.closedByUser = true
     this.ws?.close()
+  }
+
+  /** Ask the server to stream this terminal's raw output to us. */
+  subscribeTerminal(id: string): () => void {
+    this.termSubs.add(id)
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'sub', term: id }))
+    return () => {
+      this.termSubs.delete(id)
+      if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'unsub', term: id }))
+    }
   }
 
   call<T = any>(method: string, ...args: unknown[]): Promise<T> {

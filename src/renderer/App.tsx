@@ -1,6 +1,6 @@
 /**
  * ThaoTerminal - Main App
- * Multi-tab terminal with split panes, image paste, and themes
+ * Multi-tab terminal with workspace folders, image paste, and themes
  */
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { WorkspaceLayout } from './components/workspace-layout'

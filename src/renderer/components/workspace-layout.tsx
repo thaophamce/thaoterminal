@@ -19,10 +19,29 @@ import type { MenuActions } from './menu-bar'
 let termCounter = 0
 const nextTermId = () => `term-${++termCounter}`
 
+// The default shell differs per platform (PowerShell 5.1 on Windows, zsh/bash
+// elsewhere), and their syntaxes are incompatible: PS 5.1 has no `&&`, no
+// `printf`, and doesn't expand `~` in arguments to native executables. Every
+// composed initialCommand below must therefore pick the right dialect.
+const IS_WIN = window.app.platform === 'win32'
+
 // Claude/Codex TUIs enable mouse reporting and don't always disable it on exit,
 // leaving the shell spewing escape codes (e.g. "35;13;13M") on mouse movement.
 // Appending this resets mouse-tracking modes once the AI process exits.
-const MOUSE_RESET = "; printf '\\033[?1000l\\033[?1002l\\033[?1003l\\033[?1006l\\033[?1015l\\033[?1005l\\033[?1004l'"
+const MOUSE_MODES = ['?1000l', '?1002l', '?1003l', '?1006l', '?1015l', '?1005l', '?1004l']
+const MOUSE_RESET = IS_WIN
+  ? `; Write-Host -NoNewline "${MOUSE_MODES.map(m => `$([char]27)[${m}`).join('')}"`
+  : `; printf '${MOUSE_MODES.map(m => `\\033[${m}`).join('')}'`
+
+// PI session dir + launch command, in the right shell dialect.
+// PowerShell doesn't expand `~` for native commands, so use $HOME (interpolated
+// by PS inside double quotes) and New-Item instead of `mkdir -p ... &&`.
+const piSessionDir = (sessionId: string) =>
+  IS_WIN ? `$HOME/.thaoterminal/pi/${sessionId}` : `~/.thaoterminal/pi/${sessionId}`
+const piLaunchCommand = (dir: string, extraArgs = '') =>
+  IS_WIN
+    ? `New-Item -ItemType Directory -Force "${dir}" | Out-Null; pi --session-dir "${dir}"${extraArgs}${MOUSE_RESET}`
+    : `mkdir -p ${dir} && pi --session-dir ${dir}${extraArgs}${MOUSE_RESET}`
 
 interface Props {
   onImagePaste?: (dataUrl: string) => void
@@ -100,11 +119,11 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
       // its own session dir so a fresh `pi` saves there and restore can
       // `--continue` exactly that terminal's session.
       const sessionId = crypto.randomUUID()
-      const dir = `~/.thaoterminal/pi/${sessionId}`
+      const dir = piSessionDir(sessionId)
       term = {
         id, cwd: path, kind: 'pi', sessionId,
         name: `PI ${termCounter}`,
-        initialCommand: `mkdir -p ${dir} && pi --session-dir ${dir}${MOUSE_RESET}`
+        initialCommand: piLaunchCommand(dir)
       }
     } else {
       term = { id, cwd: path, kind: 'shell', name: `Terminal ${termCounter}` }
@@ -132,6 +151,10 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
       if (saved && !Array.isArray(saved) && Array.isArray(saved.workspaces) && saved.workspaces.length) {
         // New format: rebuild folders + terminals. Shells are fresh but rooted
         // at the same cwd; the previously active terminal is re-selected.
+        // `resume --last` restores THE most recent Codex session — giving it to
+        // every Codex tab would attach them all to the same conversation, so
+        // only the first restored Codex tab resumes; the rest start fresh.
+        let codexResumed = false
         ws = saved.workspaces.map(w => ({
           id: w.path,
           path: w.path,
@@ -155,27 +178,37 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
               }
             }
             if (t.kind === 'codex') {
-              // Codex has no fixed id; resume the most recent session
+              // Codex has no fixed id; resume the most recent session (first
+              // Codex tab only — see codexResumed above).
+              const cmd = codexResumed
+                ? `codex --dangerously-bypass-approvals-and-sandbox${MOUSE_RESET}`
+                : `codex resume --last${MOUSE_RESET}`
+              codexResumed = true
               return {
                 id, name: t.name, cwd, kind: 'codex' as const, ...note,
-                initialCommand: `codex resume --last${MOUSE_RESET}`
+                initialCommand: cmd
               }
             }
             if (t.kind === 'pi' && t.claudeSessionId) {
               // Continue the session stored in this terminal's own pi session dir
               const sid = t.claudeSessionId
-              const dir = `~/.thaoterminal/pi/${sid}`
+              const dir = piSessionDir(sid)
               return {
                 id, name: t.name, cwd, kind: 'pi' as const,
                 sessionId: sid, ...note,
-                initialCommand: `mkdir -p ${dir} && pi --session-dir ${dir} --continue${MOUSE_RESET}`
+                initialCommand: piLaunchCommand(dir, ' --continue')
               }
             }
             return { id, name: t.name, cwd, kind: 'shell' as const, ...note }
           })
         }))
-        const all = ws.flatMap(w => w.terminals.map(t => ({ t, path: w.path })))
-        const match = saved.active && all.find(x => x.path === saved.active!.path && x.t.name === saved.active!.name)
+        const all = ws.flatMap(w => w.terminals.map((t, idx) => ({ t, idx, path: w.path })))
+        // Prefer the saved tab INDEX (names can repeat within a folder); fall
+        // back to name matching for files saved by older versions.
+        const match = saved.active && (
+          all.find(x => x.path === saved.active!.path && typeof saved.active!.index === 'number' && x.idx === saved.active!.index) ||
+          all.find(x => x.path === saved.active!.path && x.t.name === saved.active!.name)
+        )
         activeTermId = (match || all[0])?.t.id ?? null
       } else {
         // Legacy (string[] of paths) or first run: seed home with one terminal
@@ -205,7 +238,7 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
     const t = w?.terminals.find(t => t.id === activeId)
     window.workspace.save({
       version: 1,
-      active: w && t ? { path: w.path, name: t.name } : undefined,
+      active: w && t ? { path: w.path, name: t.name, index: w.terminals.indexOf(t) } : undefined,
       workspaces: workspaces.map(ws => ({
         path: ws.path,
         label: ws.label,
@@ -229,7 +262,12 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
         })
       }, 700)
     })
-    return off
+    return () => {
+      off()
+      // Drop any pending busy-clear timers so they don't fire after unmount.
+      Object.values(busyTimers.current).forEach(clearTimeout)
+      busyTimers.current = {}
+    }
   }, [])
 
   // --- remove a terminal (used by close button and on shell exit) ---
@@ -247,6 +285,18 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
     const off = window.terminal.onExit(({ id }) => removeTerminal(id))
     return off
   }, [removeTerminal])
+
+  // User-initiated close (tab ×, toolbar 🗑, sidebar, Ctrl+W): confirm first
+  // if the terminal is still producing output, so a busy agent isn't killed
+  // by a stray click. The onExit path above stays unconditional.
+  const closeTerminal = useCallback((termId: string) => {
+    if (busy.has(termId)) {
+      const term = workspaces.flatMap(w => w.terminals).find(t => t.id === termId)
+      const name = term?.name || 'This terminal'
+      if (!window.confirm(`${name} is still running. Close it anyway?`)) return
+    }
+    removeTerminal(termId)
+  }, [busy, workspaces, removeTerminal])
 
   // --- folder actions ---
   const addFolder = useCallback(async () => {
@@ -308,12 +358,14 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
     return () => { alive = false; clearInterval(iv) }
   }, [])
 
-  // --- poll live 5h / weekly rate-limit usage (network call, so slower cadence) ---
+  // --- poll live 5h / weekly rate-limit usage. The Claude check is a REAL
+  // (1-token) API request that consumes quota, so poll slowly; main also
+  // caches results for ~4.5 min, making a faster interval pointless. ---
   useEffect(() => {
     let alive = true
     const tick = () => window.limits.get().then(l => { if (alive) setLimits(l) }).catch(() => {})
     tick()
-    const iv = setInterval(tick, 60000)
+    const iv = setInterval(tick, 5 * 60 * 1000)
     return () => { alive = false; clearInterval(iv) }
   }, [])
 
@@ -344,10 +396,10 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
       case 'newCodex': if (ws && agents.codex) spawnTerminal(ws.id, ws.path, 'codex'); break
       case 'newPi': if (ws && agents.pi) spawnTerminal(ws.id, ws.path, 'pi'); break
       case 'addFolder': addFolder(); break
-      case 'closeTerminal': if (activeId) removeTerminal(activeId); break
+      case 'closeTerminal': if (activeId) closeTerminal(activeId); break
       case 'toggleSidebar': setSidebarHidden(h => !h); break
     }
-  }, [activeWorkspace, workspaces, agents, activeId, spawnTerminal, addFolder, removeTerminal])
+  }, [activeWorkspace, workspaces, agents, activeId, spawnTerminal, addFolder, closeTerminal])
 
   // --- keep the menu-bar action bridge in sync (no deps: cheap, ref write only) ---
   useEffect(() => {
@@ -503,7 +555,7 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
         }}
         agents={agents}
         onSelectTerminal={setActiveId}
-        onCloseTerminal={removeTerminal}
+        onCloseTerminal={closeTerminal}
         onRenameTerminal={renameTerminal}
         onRenameFolder={renameFolder}
         usage={usage}
@@ -543,7 +595,7 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
                 {t.kind === 'claude' ? <ClaudeIcon size={13} /> : t.kind === 'codex' ? <CodexIcon size={13} /> : t.kind === 'pi' ? <PiIcon size={13} /> : <TerminalIcon size={13} />}
               </span>
               <span>{t.name}</span>
-              <button className="ws-tab-x" title="Close terminal (Ctrl+W)" onClick={(e) => { e.stopPropagation(); removeTerminal(t.id) }}>×</button>
+              <button className="ws-tab-x" title="Close terminal (Ctrl+W)" onClick={(e) => { e.stopPropagation(); closeTerminal(t.id) }}>×</button>
             </div>
           ))}
           {activeWorkspace && (
@@ -587,7 +639,7 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
               >📝</button>
               <button className="tb-ic" title="Add file path to terminal" onClick={handleFileAdd}>📎</button>
               <button className="tb-ic" title="New terminal in this folder (Ctrl+Shift+T / Ctrl+N)" onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}>+</button>
-              <button className="tb-ic" title="Close this terminal (Ctrl+W)" onClick={() => removeTerminal(activeTerm.id)}>🗑</button>
+              <button className="tb-ic" title="Close this terminal (Ctrl+W)" onClick={() => closeTerminal(activeTerm.id)}>🗑</button>
             </div>
           </div>
         )}

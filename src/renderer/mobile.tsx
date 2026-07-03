@@ -109,7 +109,7 @@ function TerminalView({ meta, conn, onBack }: { meta: TerminalMeta; conn: ConnSt
       cursorBlink: true,
       fontSize: 12,
       fontFamily: '"JetBrains Mono", Menlo, monospace',
-      scrollback: 5000,
+      scrollback: 100000,
       theme: { background: '#1a1b26', foreground: '#c0caf5' }
     })
     const fit = new FitAddon()
@@ -123,6 +123,8 @@ function TerminalView({ meta, conn, onBack }: { meta: TerminalMeta; conn: ConnSt
       client.call('terminal:resize', meta.id, term.cols, term.rows).catch(() => {})
     }
 
+    // Only receive this terminal's output stream (the server filters by sub).
+    const unsub = client.subscribeTerminal(meta.id)
     // Input -> PTY
     const inputDisp = term.onData((d) => client.call('terminal:write', meta.id, d).catch(() => {}))
     // Live output -> terminal
@@ -147,6 +149,7 @@ function TerminalView({ meta, conn, onBack }: { meta: TerminalMeta; conn: ConnSt
     return () => {
       window.removeEventListener('resize', onResize)
       window.removeEventListener('orientationchange', onResize)
+      unsub()
       inputDisp.dispose()
       offData()
       offExit()

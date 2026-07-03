@@ -160,10 +160,19 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [themeIndex, setThemeIndex] = useState(0)
+  // Persist the chosen theme across launches (same `taw.` prefix as the other
+  // internal localStorage keys — invisible implementation detail, not branding).
+  const [themeIndex, setThemeIndex] = useState(() => {
+    const saved = Number(localStorage.getItem('taw.themeIndex'))
+    return Number.isInteger(saved) && saved >= 0 && saved < themeKeys.length ? saved : 0
+  })
 
   const cycleTheme = useCallback(() => {
-    setThemeIndex(i => (i + 1) % themeKeys.length)
+    setThemeIndex(i => {
+      const next = (i + 1) % themeKeys.length
+      try { localStorage.setItem('taw.themeIndex', String(next)) } catch { /* best-effort */ }
+      return next
+    })
   }, [])
 
   const key = themeKeys[themeIndex]

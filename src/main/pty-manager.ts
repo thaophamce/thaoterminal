@@ -73,10 +73,13 @@ export class PtyManager {
       ptyProcess.onExit(({ exitCode }) => {
         console.log(`[PTY] Terminal ${id} exited (code ${exitCode})`)
         const instance = this.instances.get(id)
-        const wasQuickExit = instance && (Date.now() - instance.createdAt) < CRASH_WINDOW_MS
+        // Only treat a NON-ZERO exit shortly after spawn as a crash. A clean
+        // exit (code 0 — e.g. the user typed `exit` right away) must close the
+        // tab, not resurrect the shell.
+        const wasCrash = instance && exitCode !== 0 && (Date.now() - instance.createdAt) < CRASH_WINDOW_MS
         this.instances.delete(id)
 
-        if (wasQuickExit && instance && instance.restartCount < MAX_RESTART_ATTEMPTS) {
+        if (wasCrash && instance && instance.restartCount < MAX_RESTART_ATTEMPTS) {
           // Use last known cwd so restart preserves user's current directory
           const restartCwd = instance.lastKnownCwd || instance.initialCwd
           setTimeout(() => {
@@ -101,7 +104,9 @@ export class PtyManager {
     } catch (error) {
       onData(`\r\n\x1b[31mError: Failed to spawn shell (${shell})\x1b[0m\r\n`)
       if (restartCount < MAX_RESTART_ATTEMPTS) {
-        setTimeout(() => this.create(id, onData, workingDir, restartCount + 1), RESTART_DELAY_MS)
+        setTimeout(() => this.create(id, onData, workingDir, restartCount + 1, onExit), RESTART_DELAY_MS)
+      } else {
+        onExit?.()
       }
     }
   }
@@ -119,18 +124,6 @@ export class PtyManager {
     if (instance) {
       this.instances.delete(id)
       this.gracefulKill(instance.process)
-    }
-  }
-
-  killAll(): void {
-    for (const [id, instance] of this.instances) {
-      this.instances.delete(id)
-      // Force kill immediately to prevent callbacks firing after window destroyed
-      try {
-        instance.process.kill()
-      } catch {
-        // Already dead
-      }
     }
   }
 
@@ -204,11 +197,17 @@ export class PtyManager {
     const pid = instance.process.pid
     try {
       if (os.platform() === 'darwin') {
-        const { execSync } = await import('child_process')
-        const output = execSync(`lsof -p ${pid} 2>/dev/null | grep ' cwd ' | awk '{print $NF}'`, {
-          encoding: 'utf8', timeout: 1000
-        }).trim()
-        if (output) return output
+        // Async execFile — the old execSync blocked the main process for up to
+        // 1s per terminal every 5s while lsof ran.
+        const { execFile } = await import('child_process')
+        const output = await new Promise<string>((resolve) => {
+          execFile('lsof', ['-a', '-d', 'cwd', '-p', String(pid), '-Fn'], { timeout: 1000 }, (err, stdout) => {
+            resolve(err ? '' : stdout)
+          })
+        })
+        // -Fn output: lines prefixed with 'n' carry the path.
+        const line = output.split('\n').find((l) => l.startsWith('n'))
+        if (line) return line.slice(1).trim() || null
       } else if (os.platform() === 'linux') {
         const cwdLink = `/proc/${pid}/cwd`
         if (fs.existsSync(cwdLink)) return fs.readlinkSync(cwdLink)

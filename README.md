@@ -135,10 +135,10 @@ npm run dist
 Electron Main Process          Renderer Process (React)
 ┌─────────────────────┐       ┌──────────────────────────┐
 │  PtyManager         │       │  App                     │
-│  ├─ node-pty spawn  │◄─IPC─►│  ├─ SplitContainer       │
-│  ├─ shell lifecycle │       │  │  ├─ TerminalTabs       │
+│  ├─ node-pty spawn  │◄─IPC─►│  ├─ WorkspaceLayout      │
+│  ├─ shell lifecycle │       │  │  ├─ WorkspaceSidebar   │
 │  ├─ resize signals  │       │  │  └─ TerminalInstance   │
-│  └─ auto-restart    │       │  │     └─ Xterm.js + WebGL│
+│  └─ auto-restart    │       │  │     └─ Xterm.js        │
 │                     │       │  ├─ ThemeProvider          │
 │                     │       │  └─ ImageOverlay           │
 └─────────────────────┘       └──────────────────────────┘
@@ -157,8 +157,8 @@ src/
     ├── main.tsx       # Entry point
     ├── components/
     │   ├── terminal-instance.tsx  # Xterm.js wrapper + addons
-    │   ├── terminal-tabs.tsx      # Tab bar
-    │   ├── split-container.tsx    # Split pane system + shortcuts
+    │   ├── workspace-layout.tsx   # Workspace folders + terminal tabs
+    │   ├── workspace-sidebar.tsx  # Sidebar (folders, usage, settings)
     │   └── image-overlay.tsx      # Image preview modal
     ├── hooks/
     │   └── use-theme.tsx          # Theme system (4 themes)
@@ -170,7 +170,7 @@ src/
 
 - **Electron** — cross-platform desktop shell
 - **node-pty** — native PTY management (same library used by VS Code)
-- **Xterm.js** — terminal frontend with WebGL addon for GPU rendering
+- **Xterm.js** — terminal frontend
 - **React 18** — UI components
 - **electron-vite** — fast HMR development
 - **TypeScript** — type safety throughout

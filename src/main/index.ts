@@ -47,6 +47,16 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
+  // Renderer reloads (Ctrl+R, crash recovery) orphan every PTY the old page
+  // created: the new page spawns fresh ids and nothing ever kills the old
+  // shells. Reap them when a navigation commits (no-op on first load).
+  mainWindow.webContents.on('did-navigate', () => {
+    for (const meta of terminalRegistry.list()) {
+      ptyManager.kill(meta.id)
+      terminalRegistry.remove(meta.id)
+    }
+  })
+
   // Load renderer
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -100,8 +110,14 @@ ipcMain.handle('terminal:getShellName', () => {
   return ptyManager.getShellName()
 })
 
+// Only allow web URLs — a renderer (or remote client) must not be able to
+// launch arbitrary protocol handlers (file:, smb:, custom app schemes…).
+function openExternalSafe(url: string): void {
+  if (typeof url === 'string' && /^https?:\/\//i.test(url)) shell.openExternal(url)
+}
+
 ipcMain.handle('app:openExternal', (_, url: string) => {
-  shell.openExternal(url)
+  openExternalSafe(url)
 })
 
 ipcMain.handle('app:getTheme', () => {
@@ -250,7 +266,12 @@ function loadWorkspaces(): unknown {
 
 function saveWorkspaces(state: unknown): void {
   try {
-    fs.writeFileSync(workspacesFile(), JSON.stringify(state, null, 2))
+    // Atomic (temp + rename): a crash mid-write must not corrupt the layout
+    // file, or every workspace disappears on next launch.
+    const file = workspacesFile()
+    const tmp = file + '.tmp'
+    fs.writeFileSync(tmp, JSON.stringify(state, null, 2))
+    fs.renameSync(tmp, file)
   } catch {
     // best-effort persistence
   }
@@ -378,12 +399,12 @@ type ClaudeUsageEntry = {
 const claudeUsageFileCache = new Map<string, { mtime: number; size: number; entries: ClaudeUsageEntry[] }>()
 const codexUsageFileCache = new Map<string, { mtime: number; size: number; stat: UsageStat }>()
 
-function walkJsonl(dir: string, out: string[]): void {
+async function walkJsonl(dir: string, out: string[]): Promise<void> {
   let entries: fs.Dirent[]
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+  try { entries = await fs.promises.readdir(dir, { withFileTypes: true }) } catch { return }
   for (const e of entries) {
     const full = join(dir, e.name)
-    if (e.isDirectory()) walkJsonl(full, out)
+    if (e.isDirectory()) await walkJsonl(full, out)
     else if (e.name.endsWith('.jsonl')) out.push(full)
   }
 }
@@ -412,13 +433,13 @@ function claudeUniqueHash(entry: ClaudeUsageEntry): string | null {
   return `${entry.messageId}:${entry.requestId}`
 }
 
-function parseClaudeUsageFile(file: string, st: fs.Stats): ClaudeUsageEntry[] {
+async function parseClaudeUsageFile(file: string, st: fs.Stats): Promise<ClaudeUsageEntry[]> {
   const cached = claudeUsageFileCache.get(file)
   if (cached && cached.mtime === st.mtimeMs && cached.size === st.size) return cached.entries
 
   const entries: ClaudeUsageEntry[] = []
   try {
-    const lines = fs.readFileSync(file, 'utf8').split('\n')
+    const lines = (await fs.promises.readFile(file, 'utf8')).split('\n')
     for (const line of lines) {
       if (!line || line.indexOf('"usage"') === -1) continue
       let obj: any
@@ -443,21 +464,21 @@ function parseClaudeUsageFile(file: string, st: fs.Stats): ClaudeUsageEntry[] {
   return entries
 }
 
-function claudeUsageToday(today: string) {
+async function claudeUsageToday(today: string): Promise<UsageStat> {
   const total = emptyStat()
   const root = join(os.homedir(), '.claude', 'projects')
   const files: string[] = []
-  walkJsonl(root, files)
+  await walkJsonl(root, files)
 
   const startOfToday = new Date(today + 'T00:00:00').getTime()
   const seen = new Set<string>()
 
   for (const file of files) {
     let st: fs.Stats
-    try { st = fs.statSync(file) } catch { continue }
+    try { st = await fs.promises.stat(file) } catch { continue }
     if (st.mtimeMs < startOfToday) continue // no activity today
 
-    for (const entry of parseClaudeUsageFile(file, st)) {
+    for (const entry of await parseClaudeUsageFile(file, st)) {
       if (claudeLogDateKey(entry.timestamp) !== today) continue
       const uniqueHash = claudeUniqueHash(entry)
       if (uniqueHash) {
@@ -479,17 +500,17 @@ function addStat(a: UsageStat, b: UsageStat) {
   a.tokens += b.tokens; a.cost += b.cost; a.input += b.input; a.output += b.output
 }
 
-function codexUsageToday(d: Date) {
+async function codexUsageToday(d: Date): Promise<UsageStat> {
   const total = emptyStat()
   const yyyy = String(d.getFullYear())
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
   const dir = join(os.homedir(), '.codex', 'sessions', yyyy, mm, dd)
   const files: string[] = []
-  walkJsonl(dir, files)
+  await walkJsonl(dir, files)
   for (const file of files) {
     let st: fs.Stats
-    try { st = fs.statSync(file) } catch { continue }
+    try { st = await fs.promises.stat(file) } catch { continue }
     const cached = codexUsageFileCache.get(file)
     if (cached && cached.mtime === st.mtimeMs && cached.size === st.size) {
       addStat(total, cached.stat); continue
@@ -497,7 +518,7 @@ function codexUsageToday(d: Date) {
     const stat = emptyStat()
     try {
       // Each session logs a cumulative total_token_usage; take the last one
-      const lines = fs.readFileSync(file, 'utf8').split('\n')
+      const lines = (await fs.promises.readFile(file, 'utf8')).split('\n')
       let last: any = null
       for (const line of lines) {
         if (!line || line.indexOf('total_token_usage') === -1) continue
@@ -545,12 +566,12 @@ function findTotalUsage(obj: any): any {
 type DatedUsage = { date: string; tokens: number; cost: number; input: number; output: number }
 const piUsageFileCache = new Map<string, { mtime: number; size: number; entries: DatedUsage[] }>()
 
-function parsePiUsageFile(file: string, st: fs.Stats): DatedUsage[] {
+async function parsePiUsageFile(file: string, st: fs.Stats): Promise<DatedUsage[]> {
   const cached = piUsageFileCache.get(file)
   if (cached && cached.mtime === st.mtimeMs && cached.size === st.size) return cached.entries
   const entries: DatedUsage[] = []
   try {
-    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    for (const line of (await fs.promises.readFile(file, 'utf8')).split('\n')) {
       if (!line || line.indexOf('"usage"') === -1) continue
       let o: any
       try { o = JSON.parse(line) } catch { continue }
@@ -570,17 +591,17 @@ function parsePiUsageFile(file: string, st: fs.Stats): DatedUsage[] {
   return entries
 }
 
-function piUsageToday(today: string): UsageStat {
+async function piUsageToday(today: string): Promise<UsageStat> {
   const total = emptyStat()
   const roots = [join(os.homedir(), '.pi', 'agent', 'sessions'), join(os.homedir(), '.thaoterminal', 'pi')]
   const files: string[] = []
-  for (const r of roots) walkJsonl(r, files)
+  for (const r of roots) await walkJsonl(r, files)
   const startOfToday = new Date(today + 'T00:00:00').getTime()
   for (const file of files) {
     let st: fs.Stats
-    try { st = fs.statSync(file) } catch { continue }
+    try { st = await fs.promises.stat(file) } catch { continue }
     if (st.mtimeMs < startOfToday) continue
-    for (const e of parsePiUsageFile(file, st)) {
+    for (const e of await parsePiUsageFile(file, st)) {
       if (e.date !== today) continue
       total.tokens += e.tokens; total.cost += e.cost; total.input += e.input; total.output += e.output
     }
@@ -588,28 +609,40 @@ function piUsageToday(today: string): UsageStat {
   return total
 }
 
+// Async + de-duped: the transcript scan reads many JSONL files, so it must not
+// block the main process (sync reads froze IPC/UI while big files parsed), and
+// concurrent callers (desktop poll + remote clients) share one in-flight scan.
+let usageInflight: Promise<{ claude: UsageStat; codex: UsageStat; pi: UsageStat }> | null = null
 function usageSnapshot() {
+  if (usageInflight) return usageInflight
   const now = new Date()
   // Group by LOCAL calendar date, matching `ccusage daily`'s default.
   const claudeToday = localDateKey(now)
-  try {
-    return {
-      claude: claudeUsageToday(claudeToday),
-      codex: codexUsageToday(now),
-      pi: piUsageToday(claudeToday)
+  usageInflight = (async () => {
+    try {
+      const [claude, codex, pi] = await Promise.all([
+        claudeUsageToday(claudeToday),
+        codexUsageToday(now),
+        piUsageToday(claudeToday)
+      ])
+      return { claude, codex, pi }
+    } catch {
+      return { claude: emptyStat(), codex: emptyStat(), pi: emptyStat() }
+    } finally {
+      usageInflight = null
     }
-  } catch {
-    return { claude: emptyStat(), codex: emptyStat(), pi: emptyStat() }
-  }
+  })()
+  return usageInflight
 }
 ipcMain.handle('usage:get', () => usageSnapshot())
 
 // Live rolling rate-limit usage (5h / weekly) for Claude + Codex. Unlike
-// usage:get (which sums local transcripts), this asks each provider's API.
+// usage:get (which sums local transcripts), this asks each provider's API —
+// and the Claude probe is a REAL (1-token) request that itself consumes quota,
+// so cache aggressively: reuse any result younger than ~4.5 minutes.
 let limitsCache: { at: number; data: unknown } | null = null
 async function limitsSnapshot() {
-  // De-dupe bursts: each call hits the network, so reuse a result < 15s old.
-  if (limitsCache && Date.now() - limitsCache.at < 15000) return limitsCache.data
+  if (limitsCache && Date.now() - limitsCache.at < 270000) return limitsCache.data
   try {
     const data = await getLimits()
     limitsCache = { at: Date.now(), data }
@@ -654,11 +687,11 @@ const rpc: RpcTable = {
   'app:getVersion': () => app.getVersion(),
   'app:checkUpdate': () => checkUpdate(),
   'app:releasesUrl': () => `https://github.com/${REPO}/releases`,
-  'app:openExternal': (url: string) => { shell.openExternal(url) },
+  'app:openExternal': (url: string) => { openExternalSafe(url) },
   'app:runUpdate': () => false, // never let a remote client trigger a self-update
   'workspace:openFolder': () => null, // no native folder picker on a phone
-  'workspaces:load': () => loadWorkspaces(),
-  'workspaces:save': (state: unknown) => saveWorkspaces(state),
+  // NOTE: no workspaces:load/save here — the phone client is view/control only;
+  // letting a remote caller overwrite the desktop's layout file is pure risk.
   'git:branch': (cwd: string) => gitBranchOf(cwd),
   'usage:get': () => usageSnapshot(),
   'limits:get': () => limitsSnapshot()

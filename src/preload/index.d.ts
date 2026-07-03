@@ -55,7 +55,8 @@ export interface PersistedWorkspace {
 
 export interface PersistedState {
   version: number
-  active?: { path: string; name: string }
+  /** `index` (tab position within the folder) disambiguates duplicate names. */
+  active?: { path: string; name: string; index?: number }
   workspaces: PersistedWorkspace[]
 }
 
