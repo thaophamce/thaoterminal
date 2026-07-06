@@ -1,0 +1,30 @@
+HƯỚNG DẪN DÀNH CHO WINDOWS & LẬP TRÌNH VIÊN CHẠY TỪ SOURCE
+
+Nếu bạn dùng hệ điều hành Windows hoặc muốn chạy trực tiếp từ mã nguồn để phát triển ThaoTerminal, hãy làm theo các bước sau:
+
+Yêu cầu chuẩn bị:
+- Đã cài đặt Node.js (Khuyến nghị phiên bản LTS từ v18 trở lên): https://nodejs.org/
+- Đã cài đặt Git: https://git-scm.com/
+
+Các bước thực hiện:
+1. Mở Terminal (Command Prompt hoặc PowerShell trên Windows) và chạy lệnh clone dự án:
+   git clone https://github.com/thaophamce/thaoterminal.git
+
+2. Di chuyển vào thư mục dự án:
+   cd thaoterminal
+
+3. Cài đặt các thư viện phụ thuộc (dependencies):
+   npm install
+
+4. Biên dịch module hệ thống (Native Module node-pty để tạo terminal):
+   npm run rebuild
+
+5. Khởi chạy ứng dụng trong môi trường phát triển:
+   npm run dev
+
+---
+LƯU Ý SAU KHI CÀI ĐẶT:
+- Cài đặt các AI Agent (nếu chưa có):
+  * Claude Code: Chạy lệnh "npm i -g @anthropic-ai/claude-code"
+  * Codex: Chạy lệnh "npm i -g @openai/codex"
+- Đọc tài liệu hướng dẫn sử dụng chi tiết hơn tại file HDSD.md trong thư mục dự án.
