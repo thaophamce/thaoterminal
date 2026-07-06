@@ -1,6 +1,6 @@
 {
   "name": "thaoterminal",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "A modern terminal with image paste, workspace folders, and beautiful themes",
   "main": "./out/main/index.js",
   "scripts": {
