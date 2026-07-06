@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import './styles/tokens.css'
 import './styles/global.css'
 
 // No StrictMode - incompatible with xterm.js terminal lifecycle

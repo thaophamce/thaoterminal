@@ -1,7 +1,7 @@
 /**
  * Theme system - Multiple beautiful terminal themes
  */
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react'
 
 export interface TerminalTheme {
   name: string
@@ -150,10 +150,21 @@ const themes: Record<string, TerminalTheme> = {
 
 const themeKeys = Object.keys(themes)
 
+// Lightweight summary for theme pickers (Appearance settings tab) — avoids
+// exposing the full ANSI palette where only a name + a couple of swatch colors are needed.
+export interface ThemeSummary {
+  name: string
+  background: string
+  accent: string
+}
+
 interface ThemeContextValue {
   theme: TerminalTheme
   themeName: string
+  themeIndex: number
   cycleTheme: () => void
+  setTheme: (index: number) => void
+  themeList: ThemeSummary[]
   xtermTheme: Record<string, string>
 }
 
@@ -174,6 +185,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       return next
     })
   }, [])
+
+  const setTheme = useCallback((index: number) => {
+    if (index < 0 || index >= themeKeys.length) return
+    setThemeIndex(index)
+    try { localStorage.setItem('taw.themeIndex', String(index)) } catch { /* best-effort */ }
+  }, [])
+
+  const themeList = useMemo<ThemeSummary[]>(
+    () => themeKeys.map(k => ({ name: themes[k].name, background: themes[k].background, accent: themes[k].accent })),
+    []
+  )
 
   const key = themeKeys[themeIndex]
   const theme = themes[key]
@@ -203,7 +225,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, themeName: theme.name, cycleTheme, xtermTheme }}>
+    <ThemeContext.Provider value={{ theme, themeName: theme.name, themeIndex, cycleTheme, setTheme, themeList, xtermTheme }}>
       {children}
     </ThemeContext.Provider>
   )

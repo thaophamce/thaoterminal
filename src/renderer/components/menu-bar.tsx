@@ -13,6 +13,7 @@ import { formatCombo } from '../lib/keybindings'
 export interface MenuActions {
   run: (actionId: string) => void
   openKeybindings: () => void
+  openPalette: () => void
   checkForUpdates: () => void
   viewReleases: () => void
   agents: AgentState
@@ -50,7 +51,7 @@ export function MenuBar({ actionsRef, onAbout }: { actionsRef: React.MutableRefO
     }
   }, [openMenu])
 
-  const { run, openKeybindings, checkForUpdates, viewReleases, agents, bindings } = actionsRef.current
+  const { run, openKeybindings, openPalette, checkForUpdates, viewReleases, agents, bindings } = actionsRef.current
 
   const menus: MenuDef[] = [
     {
@@ -58,9 +59,6 @@ export function MenuBar({ actionsRef, onAbout }: { actionsRef: React.MutableRefO
       label: 'File',
       items: [
         { label: 'New Terminal', onClick: () => run('newTerminal'), accel: accelFor(bindings, 'newTerminal') },
-        ...(agents.claude ? [{ label: 'New Claude Session', onClick: () => run('newClaude'), accel: accelFor(bindings, 'newClaude') }] : []),
-        ...(agents.codex ? [{ label: 'New Codex Session', onClick: () => run('newCodex'), accel: accelFor(bindings, 'newCodex') }] : []),
-        ...(agents.pi ? [{ label: 'New PI Session', onClick: () => run('newPi'), accel: accelFor(bindings, 'newPi') }] : []),
         'sep',
         { label: 'Add Workspace Folder', onClick: () => run('addFolder'), accel: accelFor(bindings, 'addFolder') },
         'sep',
@@ -81,7 +79,9 @@ export function MenuBar({ actionsRef, onAbout }: { actionsRef: React.MutableRefO
       id: 'view',
       label: 'View',
       items: [
-        { label: 'Toggle Sidebar', onClick: () => run('toggleSidebar'), accel: accelFor(bindings, 'toggleSidebar') }
+        { label: 'Toggle Sidebar', onClick: () => run('toggleSidebar'), accel: accelFor(bindings, 'toggleSidebar') },
+        'sep',
+        { label: 'Command Palette', onClick: openPalette, accel: 'Ctrl+K' }
       ]
     },
     {

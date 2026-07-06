@@ -1,0 +1,67 @@
+/**
+ * ThaoTerminal - Design Tokens
+ *
+ * Layered on top of the per-theme CSS variables set by use-theme.tsx
+ * (--accent/--border/--tab-bg/--tab-active-bg/--hover, plus the inline
+ * `background`/`color` on .app). This file only adds theme-agnostic
+ * scales (spacing/radius/elevation/type/motion) and a small set of
+ * semantic status colors that are already hard-coded in a dozen places
+ * across global.css — consolidated here so they read as intent, not hex.
+ *
+ * Import once, before global.css.
+ */
+:root {
+  /* Spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 48px;
+
+  /* Radius */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  /* Elevation (dark-UI shadows; alpha-only so they work across all 4 themes) */
+  --e1: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --e2: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --e3: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --e4: 0 24px 64px rgba(0, 0, 0, 0.5);
+
+  /* Typography */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 14px;
+  --fs-xl: 16px;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+  --dur-slow: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Icon sizes */
+  --ic-sm: 14px;
+  --ic-md: 16px;
+  --ic-lg: 20px;
+
+  /* Semantic status colors — constant across themes, match values already
+     hard-coded throughout global.css (green/red/amber/blue). */
+  --success: #34d399;
+  --success-bg: rgba(52, 211, 153, 0.14);
+  --warning: #e0af68;
+  --warning-bg: rgba(224, 175, 104, 0.14);
+  --danger: #f7768e;
+  --danger-bg: rgba(247, 118, 142, 0.14);
+  --info: #7aa2f7;
+  --info-bg: rgba(122, 162, 247, 0.14);
+}

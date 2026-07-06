@@ -76,6 +76,17 @@ export function GearIcon({ size = 14, className }: IconProps) {
   )
 }
 
+/** Search — magnifying glass, used by the command palette */
+export function SearchIcon({ size = 14, className }: IconProps) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M20 20l-4.35-4.35" />
+    </svg>
+  )
+}
+
 /** Codex — OpenAI-style six-petal blossom */
 export function CodexIcon({ size = 14, className }: IconProps) {
   const petals = Array.from({ length: 6 }, (_, i) => {

@@ -6,7 +6,10 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { useTheme } from '../hooks/use-theme'
+import { joinPastedLines } from '../lib/paste'
+import { classifyScrollKey, isBrowserPasteShortcut } from '../lib/terminal-keys'
 import '@xterm/xterm/css/xterm.css'
 
 interface Props {
@@ -29,6 +32,24 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
   const initializedRef = useRef(false)
   const { xtermTheme } = useTheme()
   const [showScrollDown, setShowScrollDown] = useState(false)
+  const [pasteModalData, setPasteModalData] = useState<{ text: string } | null>(null)
+  const [modalText, setModalText] = useState('')
+
+  useEffect(() => {
+    if (pasteModalData) {
+      setModalText(pasteModalData.text)
+    } else {
+      setModalText('')
+    }
+  }, [pasteModalData])
+
+  // Editable paste placeholder (shell tabs only) — see the input-forwarding
+  // effect below for the full echo/erase/flush design. `bufferUnitsRef` holds
+  // the units typed/pasted since the buffer was last flushed; `pasteCounterRef`
+  // numbers placeholders (#1, #2…) and resets once the buffer empties out.
+  type BufferUnit = { kind: 'char'; value: string } | { kind: 'placeholder'; visibleLen: number; real: string }
+  const bufferUnitsRef = useRef<BufferUnit[]>([])
+  const pasteCounterRef = useRef(0)
 
   // Last size we actually pushed to the PTY. Re-asserting the SAME size still
   // fires a resize signal down to the shell — on Windows (ConPTY) that makes
@@ -88,8 +109,14 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
       lineHeight: 1.3,
       letterSpacing: 0,
       scrollback: 100000,
+      scrollSensitivity: 3,
       allowProposedApi: true,
-      theme: xtermTheme
+      theme: xtermTheme,
+      // Windows only: without this, ConPTY resizes don't get xterm's
+      // scrollback-preserving compensation (rows added on grow come from
+      // scrollback instead of being blank) — resizing the window can then
+      // scramble/duplicate visible lines.
+      ...(window.app.platform === 'win32' ? { windowsPty: { backend: 'conpty' as const } } : {})
     })
 
     const fitAddon = new FitAddon()
@@ -97,6 +124,8 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
     terminal.loadAddon(new WebLinksAddon((_event, uri) => {
       window.app.openExternal(uri)
     }))
+    terminal.loadAddon(new Unicode11Addon())
+    terminal.unicode.activeVersion = '11'
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
@@ -108,22 +137,34 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
     //           fires a paste event instead, which xterm's internal listener handles.
     // Ctrl+C — if text is selected, copy it; otherwise fall through so xterm sends
     //           ^C (SIGINT) to the PTY as normal.
+    // Shift+Insert — same "let the browser paste" strategy as Ctrl+V.
     // Shift+Enter — xterm sends plain \r for this exactly like a bare Enter, so
     //           CLI TUIs (Claude Code, Codex) can't tell "newline" from "submit".
     //           Send ESC+CR instead, the sequence those CLIs treat as insert-newline.
+    // Bare PageUp/PageDown/Ctrl+Home/Ctrl+End — xterm's own default sends these
+    //           as VT sequences to the PTY, which only browses scrollback with
+    //           Shift held. Scroll the local viewport instead, matching Windows
+    //           Terminal/VSCode convention — but only outside the alternate
+    //           screen buffer, so full-screen TUIs (vim, htop, Claude/Codex's own
+    //           Ink UI) keep receiving raw PageUp/PageDown/Home/End untouched.
     terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
-        if (e.key === 'v') return false
         if (e.key === 'c' || e.key === 'C') {
           const sel = terminal.getSelection()
           if (sel) navigator.clipboard.writeText(sel)
           return false
         }
       }
+      if (isBrowserPasteShortcut(e)) return false
       if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && e.key === 'Enter') {
         if (e.type === 'keydown') window.terminal.write(id, '\x1b\r')
         return false
       }
+      const scrollAction = classifyScrollKey(e, terminal.buffer.active.type === 'alternate')
+      if (scrollAction === 'pageUp') { terminal.scrollPages(-1); return false }
+      if (scrollAction === 'pageDown') { terminal.scrollPages(1); return false }
+      if (scrollAction === 'top') { terminal.scrollToTop(); return false }
+      if (scrollAction === 'bottom') { terminal.scrollToBottom(); return false }
       return true
     })
 
@@ -137,8 +178,94 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
 
     // Terminal input -> PTY (guard against writing to dead PTY)
     let ptyAlive = true
+
+    // Clears the pending buffer and resets the placeholder counter together —
+    // every place that empties the buffer should renumber from #1 again.
+    const clearBufferUnits = () => {
+      bufferUnitsRef.current = []
+      pasteCounterRef.current = 0
+    }
+
+    // Erase everything the buffer has echoed locally (one `\b \b` per visible
+    // column) — must run BEFORE the buffer is cleared, since it needs the
+    // widths of the units being erased.
+    const eraseLocalEcho = () => {
+      let cols = 0
+      for (const u of bufferUnitsRef.current) cols += u.kind === 'char' ? 1 : u.visibleLen
+      if (cols > 0) terminal.write('\b \b'.repeat(cols))
+    }
+
+    // Join buffered units back into the real text (placeholders expand to
+    // their original paste) and clear the buffer.
+    const flushBufferText = () => {
+      const real = bufferUnitsRef.current.map(u => (u.kind === 'char' ? u.value : u.real)).join('')
+      clearBufferUnits()
+      return real
+    }
+
+    // Only shell tabs buffer input locally, and only outside the alternate
+    // screen buffer — Claude/Codex/PI (as dedicated tabs, or `claude`/`codex`
+    // run manually inside a Shell tab) switch to the alt buffer and do their
+    // own input parsing/echo; forwarding a synthetic `;`-joined mega-paste to
+    // them as literal keystrokes drops lines and corrupts their redraw.
+    const handleBufferedInput = (data: string) => {
+      if (data === '\r' || data === '\n') {
+        eraseLocalEcho()
+        const real = flushBufferText()
+        window.terminal.write(id, real + '\r')
+        return
+      }
+      if (data === '\x03') {
+        // Ctrl+C — cancel the buffered line, forward ^C as usual (no run).
+        eraseLocalEcho()
+        clearBufferUnits()
+        window.terminal.write(id, '\x03')
+        return
+      }
+      if (data === '\x7f' || data === '\b') {
+        const units = bufferUnitsRef.current
+        const last = units[units.length - 1]
+        if (last) {
+          terminal.write('\b \b'.repeat(last.kind === 'char' ? 1 : last.visibleLen))
+          units.pop()
+          if (units.length === 0) pasteCounterRef.current = 0
+        }
+        return
+      }
+      // A run of plain printable characters (typing or a short paste) — echo
+      // locally and keep the placeholder(s) alive in the buffer.
+      if (!/[\x00-\x1f\x7f]/.test(data)) {
+        terminal.write(data)
+        for (const ch of Array.from(data)) bufferUnitsRef.current.push({ kind: 'char', value: ch })
+        return
+      }
+      // Anything else (arrows, Tab, Ctrl+U/W/R, Home/End…) — don't try to
+      // emulate a line editor. Bung sớm: erase the local echo, flush the real
+      // text down to the PTY, then forward this input right behind it so the
+      // shell's own line editor picks up from the correct real content.
+      eraseLocalEcho()
+      const real = flushBufferText()
+      window.terminal.write(id, real + data)
+    }
+
     const inputDisposable = terminal.onData((data) => {
-      if (ptyAlive) window.terminal.write(id, data)
+      if (!ptyAlive) return
+      const inAltBuffer = terminal.buffer.active.type === 'alternate'
+      if (kind === 'shell' && bufferUnitsRef.current.length > 0) {
+        if (inAltBuffer) {
+          // A full-screen program (e.g. `claude`/`codex` launched manually,
+          // vim, htop) started while a paste was still buffered — erase our
+          // placeholder echo and flush the stale buffer as plain text instead
+          // of leaving it orphaned.
+          eraseLocalEcho()
+          const real = flushBufferText()
+          window.terminal.write(id, real + data)
+          return
+        }
+        handleBufferedInput(data)
+        return
+      }
+      window.terminal.write(id, data)
     })
 
     // Stop writing when PTY exits unexpectedly
@@ -199,14 +326,14 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
   // Handle visibility and focus
   useEffect(() => {
     if (isActive && terminalRef.current && fitAddonRef.current) {
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         fitAddonRef.current!.fit()
         const { cols, rows } = terminalRef.current!
         // Forced: while this tab was hidden a remote phone client may have
         // resized the shared PTY without our local cols/rows changing.
         pushResize(cols, rows, true)
         terminalRef.current!.focus()
-      }, 50)
+      })
     }
   }, [isActive, id, pushResize])
 
@@ -280,27 +407,66 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
   // host (and most shells without bracketed-paste support) treats every embedded
   // newline as an Enter press, executing each line the instant it lands. Later
   // lines can then error or land in an unintended state (e.g. after a `cd`),
-  // which looks like the pasted text got cut off. Collapse it into one
-  // `;`-joined line instead so it runs as a single compound statement. Only for
-  // plain `shell` tabs — Claude Code/Codex/PI need literal multi-line text for
-  // their prompts, so leave those to xterm's normal (bracketed) paste handling.
+  // which looks like the pasted text got cut off. Instead of sending the joined
+  // text straight to the PTY, drop a single-line, editable placeholder (like
+  // Claude Code's own input) — the real `; `-joined text lives in
+  // `bufferUnitsRef` and is only sent once Enter is pressed (see the input
+  // handler above), so the PTY only ever sees it — and echoes it — once. Only
+  // for plain `shell` tabs outside the alternate screen buffer — Claude
+  // Code/Codex/PI (as dedicated tabs, or run manually inside a Shell tab) need
+  // literal multi-line text and already handle bracketed paste themselves.
+  // Shared with the right-click paste handler below.
+  const pasteTextRef = useRef<(text: string) => void>(() => {})
+  pasteTextRef.current = (text: string) => {
+    const term = terminalRef.current
+    if (!term) return
+    const inAltBuffer = term.buffer.active.type === 'alternate'
+    const result = joinPastedLines(text)
+
+    if (kind === 'shell' && !inAltBuffer && result && result.lines.length > 10) {
+      setPasteModalData({ text })
+    } else {
+      term.paste(text)
+    }
+  }
+
   useEffect(() => {
     if (kind !== 'shell') return
     const handler = (e: ClipboardEvent) => {
       if (!isActiveRef.current) return
+      const term = terminalRef.current
+      if (term?.buffer.active.type === 'alternate') return
+
       const items = e.clipboardData?.items
       if (items && Array.from(items).some((item) => item.type.startsWith('image/'))) return
       const text = e.clipboardData?.getData('text/plain')
       if (!text) return
-      const lines = text.split(/\r\n|\r|\n/).map((l) => l.trim()).filter(Boolean)
-      if (lines.length < 2) return
       e.preventDefault()
       e.stopImmediatePropagation()
-      window.terminal.write(id, lines.join('; '))
+      pasteTextRef.current(text)
     }
     window.addEventListener('paste', handler, true)
     return () => window.removeEventListener('paste', handler, true)
   }, [id, kind])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const handler = async (e: MouseEvent) => {
+      if (!isActiveRef.current) return
+      e.preventDefault()
+      try {
+        const text = await navigator.clipboard.readText()
+        if (text) {
+          pasteTextRef.current(text)
+        }
+      } catch {
+        // Clipboard read denied/unavailable — no-op, don't break right-click.
+      }
+    }
+    container.addEventListener('contextmenu', handler)
+    return () => container.removeEventListener('contextmenu', handler)
+  }, [])
 
   // Drag and drop image
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -346,6 +512,98 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
         >
           ↓
         </button>
+      )}
+
+      {pasteModalData && (
+        <div className="paste-modal-overlay" onClick={() => setPasteModalData(null)}>
+          <div className="paste-modal" onClick={e => e.stopPropagation()}>
+            <div className="kb-head">
+              <h2>Paste Multi-line Text ({modalText.split(/\r\n|\r|\n/).filter(Boolean).length} lines)</h2>
+              <button className="kb-close" onClick={() => setPasteModalData(null)} title="Cancel (Esc)">×</button>
+            </div>
+            <div className="paste-modal-body">
+              <textarea
+                className="paste-modal-textarea"
+                value={modalText}
+                onChange={e => setModalText(e.target.value)}
+                placeholder="Paste code or text here..."
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setPasteModalData(null)
+                  } else if (e.key === 'Enter' && e.ctrlKey) {
+                    e.preventDefault()
+                    const lines = modalText.split(/\r\n|\r|\n/).map(l => l.trim()).filter(Boolean)
+                    const joined = lines.join('; ')
+                    
+                    // Send chunked to prevent dropped characters on Windows ConPTY
+                    const chunkSize = 150
+                    let offset = 0
+                    const sendNext = () => {
+                      if (offset >= joined.length) {
+                        window.terminal.write(id, '\r')
+                        return
+                      }
+                      window.terminal.write(id, joined.slice(offset, offset + chunkSize))
+                      offset += chunkSize
+                      setTimeout(sendNext, 15)
+                    }
+                    sendNext()
+                    setPasteModalData(null)
+                  }
+                }}
+              />
+              <div className="paste-modal-warning">
+                Warning: Pasting text with multiple lines can be dangerous. You can review/edit the text above. Ctrl+Enter to submit joined with semicolons.
+              </div>
+            </div>
+            <div className="paste-modal-actions">
+              <button className="paste-btn paste-btn-cancel" onClick={() => setPasteModalData(null)}>
+                Cancel
+              </button>
+              <button
+                className="paste-btn paste-btn-secondary"
+                onClick={() => {
+                  const chunkSize = 150
+                  let offset = 0
+                  const sendNext = () => {
+                    if (offset >= modalText.length) return
+                    window.terminal.write(id, modalText.slice(offset, offset + chunkSize))
+                    offset += chunkSize
+                    setTimeout(sendNext, 15)
+                  }
+                  sendNext()
+                  setPasteModalData(null)
+                }}
+              >
+                Send with Newlines
+              </button>
+              <button
+                className="paste-btn paste-btn-primary"
+                onClick={() => {
+                  const lines = modalText.split(/\r\n|\r|\n/).map(l => l.trim()).filter(Boolean)
+                  const joined = lines.join('; ')
+                  
+                  const chunkSize = 150
+                  let offset = 0
+                  const sendNext = () => {
+                    if (offset >= joined.length) {
+                      window.terminal.write(id, '\r')
+                      return
+                    }
+                    window.terminal.write(id, joined.slice(offset, offset + chunkSize))
+                    offset += chunkSize
+                    setTimeout(sendNext, 15)
+                  }
+                  sendNext()
+                  setPasteModalData(null)
+                }}
+              >
+                Send (Join with ;)
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

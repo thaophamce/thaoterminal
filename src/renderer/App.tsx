@@ -7,6 +7,7 @@ import { WorkspaceLayout } from './components/workspace-layout'
 import { MenuBar, type MenuActions } from './components/menu-bar'
 import { ThemeProvider, useTheme } from './hooks/use-theme'
 import { ImageOverlay } from './components/image-overlay'
+import { SearchIcon } from './components/icons'
 
 function AppContent() {
   const { theme, themeName, cycleTheme } = useTheme()
@@ -17,6 +18,7 @@ function AppContent() {
   const menuActionsRef = useRef<MenuActions>({
     run: () => {},
     openKeybindings: () => {},
+    openPalette: () => {},
     checkForUpdates: () => {},
     viewReleases: () => {},
     agents: { claude: false, codex: false, pi: false },
@@ -86,13 +88,16 @@ function AppContent() {
           )}
           <MenuBar actionsRef={menuActionsRef} onAbout={handleBrandClick} />
         </div>
+        <button className="titlebar-palette-btn" onClick={() => menuActionsRef.current.openPalette()} title="Command Palette (Ctrl+K)">
+          <SearchIcon size={13} />
+        </button>
         <button className="titlebar-theme-btn" onClick={cycleTheme} title={`Theme: ${themeName}`}>
           ◐
         </button>
       </div>
 
       {/* Main content */}
-      <WorkspaceLayout onImagePaste={handleImagePaste} menuActionsRef={menuActionsRef} />
+      <WorkspaceLayout onImagePaste={handleImagePaste} menuActionsRef={menuActionsRef} onCycleTheme={cycleTheme} themeName={themeName} />
 
       {/* Image overlay when pasted */}
       {pastedImage && (

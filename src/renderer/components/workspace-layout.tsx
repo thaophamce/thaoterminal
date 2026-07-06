@@ -4,15 +4,16 @@
  * Every terminal stays mounted (and its shell alive) while it exists; only the
  * active one is visible. Clicking + under a folder spawns a shell with cwd = that folder.
  */
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { TerminalInstance } from './terminal-instance'
 import { WorkspaceSidebar, Workspace, Term, TermKind } from './workspace-sidebar'
-import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon } from './icons'
-import type { UsageSnapshot, LimitsSnapshot, UpdateInfo } from '../../preload/index.d'
+import { ClaudeIcon, CodexIcon, TerminalIcon, PiIcon, GearIcon } from './icons'
+import type { UsageSnapshot, LimitsSnapshot, UpdateInfo, RemoteStatus } from '../../preload/index.d'
 import { KeybindingsModal } from './keybindings-modal'
 import { UpdateModal } from './update-modal'
 import { RemoteModal } from './remote-modal'
-import { Binding, loadBindings, saveBindings, eventToCombo } from '../lib/keybindings'
+import { CommandPalette, type PaletteCommand } from './command-palette'
+import { Binding, loadBindings, saveBindings, eventToCombo, formatCombo } from '../lib/keybindings'
 import { AgentKind, AgentState, loadEnabledAgents, saveEnabledAgents, resetEnabledAgents } from '../lib/agents'
 import type { MenuActions } from './menu-bar'
 
@@ -46,9 +47,11 @@ const piLaunchCommand = (dir: string, extraArgs = '') =>
 interface Props {
   onImagePaste?: (dataUrl: string) => void
   menuActionsRef?: React.MutableRefObject<MenuActions>
+  onCycleTheme?: () => void
+  themeName?: string
 }
 
-export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
+export function WorkspaceLayout({ onImagePaste, menuActionsRef, onCycleTheme, themeName }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [busy, setBusy] = useState<Set<string>>(new Set())
@@ -68,6 +71,8 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
   const [agents, setAgents] = useState<AgentState>(() => loadEnabledAgents())
   const [showKeybindings, setShowKeybindings] = useState(false)
   const [showRemote, setShowRemote] = useState(false)
+  const [showPalette, setShowPalette] = useState(false)
+  const [remoteStatus, setRemoteStatus] = useState<RemoteStatus | null>(null)
   const loadedRef = useRef(false)
   const resizingRef = useRef(false)
 
@@ -321,6 +326,21 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
     setWorkspaces(prev => prev.map(w => (w.id === wsId ? { ...w, collapsed: !w.collapsed } : w)))
   }, [])
 
+  // Drag-and-drop reorder in the sidebar — plain array move, no schema change;
+  // the existing persistence effect below saves whatever order `workspaces` is in.
+  const reorderFolder = useCallback((dragId: string, overId: string) => {
+    if (dragId === overId) return
+    setWorkspaces(prev => {
+      const from = prev.findIndex(w => w.id === dragId)
+      const to = prev.findIndex(w => w.id === overId)
+      if (from === -1 || to === -1) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }, [])
+
   const renameTerminal = useCallback((termId: string, name: string) => {
     setWorkspaces(prev => prev.map(w => ({
       ...w,
@@ -378,6 +398,21 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
     return () => clearInterval(iv)
   }, [])
 
+  // --- remote-access status (status bar indicator; RemoteModal owns start/stop) ---
+  useEffect(() => {
+    const refresh = () => window.remote.status().then(setRemoteStatus).catch(() => {})
+    refresh()
+    const iv = setInterval(refresh, 5000)
+    window.addEventListener('focus', refresh)
+    return () => { clearInterval(iv); window.removeEventListener('focus', refresh) }
+  }, [])
+  // Re-check the moment the remote modal closes, so start/stop reflects immediately
+  // instead of waiting up to 5s for the next poll.
+  useEffect(() => {
+    if (showRemote) return
+    window.remote.status().then(setRemoteStatus).catch(() => {})
+  }, [showRemote])
+
   const [showUpdateGuide, setShowUpdateGuide] = useState(false)
   const openReleases = useCallback(() => {
     window.app.releasesUrl().then(u => window.app.openExternal(u)).catch(() => {})
@@ -407,6 +442,7 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
     menuActionsRef.current = {
       run: runAction,
       openKeybindings: () => setShowKeybindings(true),
+      openPalette: () => setShowPalette(true),
       checkForUpdates: doUpdate,
       viewReleases: openReleases,
       agents,
@@ -421,6 +457,14 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
 
     const handler = (e: KeyboardEvent) => {
       const isMeta = e.metaKey || e.ctrlKey
+      // Ctrl+K / Cmd+K opens the command palette — handled here (rather than
+      // only inside CommandPalette) so it works even while it's unmounted.
+      if (isMeta && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault(); setShowPalette(true); return
+      }
+      // While open, the palette owns all other key handling itself (see its
+      // own capture-phase listener) — don't also run shortcuts underneath.
+      if (showPalette) return
       // ⌘1–⌘9: jump to the Nth terminal (fixed)
       if (isMeta && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
         e.preventDefault()
@@ -439,7 +483,7 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [bindings, workspaces, runAction])
+  }, [bindings, workspaces, runAction, showPalette])
 
   const rebind = useCallback((id: string, combo: string) => {
     setBindings(prev => {
@@ -470,6 +514,50 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
     resetEnabledAgents()
     setAgents(loadEnabledAgents())
   }, [])
+
+  // --- command palette: command list + dispatcher ---
+  // Accelerator hint for a runAction-backed command, pulled from the same
+  // `bindings` the menu bar reads (accelFor in menu-bar.tsx does the same).
+  const formatAccel = useCallback((id: string) => {
+    const b = bindings.find(b => b.id === id)
+    return b ? formatCombo(b.combo) : undefined
+  }, [bindings])
+
+  const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    const cmds: PaletteCommand[] = [
+      { id: 'newTerminal', label: 'New Terminal', group: 'File', hint: formatAccel('newTerminal'), icon: <TerminalIcon /> }
+    ]
+    cmds.push({ id: 'addFolder', label: 'Add Workspace Folder', group: 'File', hint: formatAccel('addFolder') })
+    if (activeId) cmds.push({ id: 'closeTerminal', label: 'Close Terminal', group: 'File', hint: formatAccel('closeTerminal') })
+    cmds.push({ id: 'toggleSidebar', label: 'Toggle Sidebar', group: 'View', hint: formatAccel('toggleSidebar') })
+    allTerminals.slice(0, 9).forEach((t, i) => {
+      cmds.push({
+        id: `jump:${t.id}`,
+        label: `Go to: ${t.name}`,
+        group: 'Go to',
+        hint: `Ctrl+${i + 1}`,
+        icon: t.kind === 'claude' ? <ClaudeIcon /> : t.kind === 'codex' ? <CodexIcon /> : t.kind === 'pi' ? <PiIcon /> : <TerminalIcon />
+      })
+    })
+    cmds.push({ id: 'openSettings', label: 'Open Settings', group: 'App', icon: <GearIcon /> })
+    cmds.push({ id: 'openRemote', label: 'Remote Access', group: 'App' })
+    if (onCycleTheme) cmds.push({ id: 'cycleTheme', label: 'Cycle Theme', group: 'App' })
+    cmds.push({ id: 'checkUpdates', label: 'Check for Updates', group: 'App' })
+    cmds.push({ id: 'viewReleases', label: 'View Releases', group: 'App' })
+    return cmds
+  }, [agents, activeId, allTerminals, onCycleTheme, formatAccel])
+
+  const runPaletteCommand = useCallback((id: string) => {
+    if (id.startsWith('jump:')) { setActiveId(id.slice(5)); return }
+    switch (id) {
+      case 'openSettings': setShowKeybindings(true); break
+      case 'openRemote': setShowRemote(true); break
+      case 'cycleTheme': onCycleTheme?.(); break
+      case 'checkUpdates': doUpdate(); break
+      case 'viewReleases': openReleases(); break
+      default: runAction(id)
+    }
+  }, [onCycleTheme, doUpdate, openReleases, runAction])
 
   // --- sidebar resize (drag handle) ---
   const startResize = useCallback((e: React.MouseEvent) => {
@@ -520,6 +608,14 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
 
       {showRemote && <RemoteModal onClose={() => setShowRemote(false)} />}
 
+      {showPalette && (
+        <CommandPalette
+          commands={paletteCommands}
+          onRun={runPaletteCommand}
+          onClose={() => setShowPalette(false)}
+        />
+      )}
+
       {/* Floating restore pill when the sidebar is hidden */}
       {sidebarHidden && (
         <button className="sidebar-restore" onClick={() => setSidebarHidden(false)} title="Show sidebar (Ctrl+B)">
@@ -537,6 +633,7 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
         onAddFolder={addFolder}
         onRemoveFolder={removeFolder}
         onToggle={toggleFolder}
+        onReorderFolder={reorderFolder}
         onAddTerminal={(wsId) => {
           const ws = workspaces.find(w => w.id === wsId)
           if (ws) spawnTerminal(ws.id, ws.path)
@@ -605,21 +702,6 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
                 title="New terminal in this folder (Ctrl+Shift+T / Ctrl+N)"
                 onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path)}
               >+</button>
-              {agents.claude && <button
-                className="ws-tab-add claude"
-                title="New Claude Code session"
-                onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path, 'claude')}
-              ><ClaudeIcon size={14} /></button>}
-              {agents.codex && <button
-                className="ws-tab-add codex"
-                title="New Codex session"
-                onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path, 'codex')}
-              ><CodexIcon size={14} /></button>}
-              {agents.pi && <button
-                className="ws-tab-add pi"
-                title="New PI session"
-                onClick={() => spawnTerminal(activeWorkspace.id, activeWorkspace.path, 'pi')}
-              ><PiIcon size={14} /></button>}
             </>
           )}
         </div>
@@ -683,6 +765,31 @@ export function WorkspaceLayout({ onImagePaste, menuActionsRef }: Props) {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Status bar: theme (click to cycle), version/update, remote-access state */}
+        <div className="ws-statusbar">
+          {onCycleTheme && (
+            <button className="sb-item sb-theme" onClick={onCycleTheme} title="Click to cycle theme">
+              ◐ {themeName ?? 'Theme'}
+            </button>
+          )}
+          <button
+            className="sb-item sb-remote"
+            onClick={() => setShowRemote(true)}
+            title={remoteStatus?.running ? 'Remote access is on — click to manage' : 'Remote access is off — click to start'}
+          >
+            <span className={`sb-dot ${remoteStatus?.running ? 'on' : 'off'}`} />
+            Remote {remoteStatus?.running ? 'on' : 'off'}
+          </button>
+          <div className="sb-spacer" />
+          <button
+            className={`sb-item sb-version ${update?.hasUpdate ? 'has-update' : ''}`}
+            onClick={update?.hasUpdate ? doUpdate : openReleases}
+            title={update?.hasUpdate ? `Update available: v${update.latest}` : `ThaoTerminal v${version}`}
+          >
+            {update?.hasUpdate ? `v${version} → v${update.latest}` : `v${version}`}
+          </button>
         </div>
       </div>
     </div>

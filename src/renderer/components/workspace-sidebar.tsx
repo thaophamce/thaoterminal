@@ -42,6 +42,7 @@ interface Props {
   onAddFolder: () => void
   onRemoveFolder: (id: string) => void
   onToggle: (id: string) => void
+  onReorderFolder: (dragId: string, overId: string) => void
   onRenameFolder: (id: string, label: string) => void
   onAddTerminal: (workspaceId: string) => void
   onAddClaude: (workspaceId: string) => void
@@ -126,7 +127,7 @@ function splitPath(p: string, home: string): { parent: string; base: string } {
 
 export function WorkspaceSidebar({
   workspaces, activeId, busy, home, query, onQuery,
-  onAddFolder, onRemoveFolder, onToggle, onRenameFolder, onAddTerminal, onAddClaude, onAddCodex, onAddPi,
+  onAddFolder, onRemoveFolder, onToggle, onReorderFolder, onRenameFolder, onAddTerminal, onAddClaude, onAddCodex, onAddPi,
   agents, onSelectTerminal, onCloseTerminal, onRenameTerminal, usage, limits, version, update, onOpenReleases,
   onUpdate, hotkeyIndex, onOpenRemote, onOpenSettings, onToggleSidebar
 }: Props) {
@@ -134,6 +135,9 @@ export function WorkspaceSidebar({
   const [editValue, setEditValue] = useState('')
   const [folderEditingId, setFolderEditingId] = useState<string | null>(null)
   const [folderEditValue, setFolderEditValue] = useState('')
+  // Drag-and-drop folder reorder — HTML5 DnD, no external lib.
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
   // Usage + rate-limit footer is collapsed by default; expand on demand. Persisted.
   const [statsOpen, setStatsOpen] = useState(() => {
     try { return localStorage.getItem('ws-stats-open') === '1' } catch { return false }
@@ -189,8 +193,27 @@ export function WorkspaceSidebar({
           const { parent, base } = splitPath(ws.path, home)
           const count = ws.terminals.length
           return (
-            <div key={ws.id} className={`ws-folder ${ws.collapsed ? 'collapsed' : ''}`}>
-              <div className="folder-head">
+            <div
+              key={ws.id}
+              className={`ws-folder ${ws.collapsed ? 'collapsed' : ''} ${dragId === ws.id ? 'dragging' : ''} ${overId === ws.id && dragId && dragId !== ws.id ? 'drag-over' : ''}`}
+            >
+              <div
+                className="folder-head"
+                draggable
+                onDragStart={(e) => { setDragId(ws.id); e.dataTransfer.effectAllowed = 'move' }}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  if (dragId && dragId !== ws.id) setOverId(ws.id)
+                }}
+                onDragLeave={() => setOverId(id => (id === ws.id ? null : id))}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  if (dragId && dragId !== ws.id) onReorderFolder(dragId, ws.id)
+                  setDragId(null)
+                  setOverId(null)
+                }}
+                onDragEnd={() => { setDragId(null); setOverId(null) }}
+              >
                 <button className="chev" onClick={() => onToggle(ws.id)}>▾</button>
                 <span className="folder-ic">📁</span>
                 {folderEditingId === ws.id ? (
@@ -224,9 +247,6 @@ export function WorkspaceSidebar({
                   </span>
                 )}
                 {ws.branch && <span className="folder-branch">⎇ {ws.branch}</span>}
-                {agents.claude && <button className="folder-claude" title="New Claude Code session here" onClick={() => onAddClaude(ws.id)}><ClaudeIcon size={13} /></button>}
-                {agents.codex && <button className="folder-codex" title="New Codex session here" onClick={() => onAddCodex(ws.id)}><CodexIcon size={13} /></button>}
-                {agents.pi && <button className="folder-pi" title="New PI session here" onClick={() => onAddPi(ws.id)}><PiIcon size={13} /></button>}
                 <button className="folder-add" title="New terminal here" onClick={() => onAddTerminal(ws.id)}>+</button>
                 <button className="folder-rm" title="Remove folder" onClick={() => onRemoveFolder(ws.id)}>🗑</button>
               </div>

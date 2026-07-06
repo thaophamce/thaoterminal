@@ -16,6 +16,7 @@ export class RemoteClient {
   /** Terminal ids we want raw output for; re-sent to the server on every (re)connect. */
   private termSubs = new Set<string>()
   private reconnectDelay = 1000
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(private token: string) {}
 
@@ -25,6 +26,7 @@ export class RemoteClient {
   }
 
   private open(): void {
+    this.reconnectTimer = null
     this.setState('connecting')
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(this.token)}`)
@@ -44,7 +46,7 @@ export class RemoteClient {
         // Exponential backoff (1s → 15s cap) so a dead server isn't hammered.
         const delay = this.reconnectDelay
         this.reconnectDelay = Math.min(this.reconnectDelay * 2, 15000)
-        setTimeout(() => this.open(), delay)
+        this.reconnectTimer = setTimeout(() => this.open(), delay)
       }
     }
     ws.onmessage = (ev) => {
@@ -64,7 +66,16 @@ export class RemoteClient {
 
   close(): void {
     this.closedByUser = true
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null }
     this.ws?.close()
+  }
+
+  /** Skip the backoff and reconnect immediately (user tapped "Retry"). */
+  retryNow(): void {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null }
+    this.reconnectDelay = 1000
+    this.open()
   }
 
   /** Ask the server to stream this terminal's raw output to us. */
