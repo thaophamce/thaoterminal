@@ -35,11 +35,30 @@ export class PtyManager {
     return '/bin/sh'
   }
 
+  /**
+   * On Windows we pre-define `claude` / `codex` wrapper functions so that typing
+   * the bare command by hand behaves like the app's launch buttons: it auto-adds
+   * the permission-bypass flag the user always wants. `Get-Command -CommandType
+   * Application,ExternalScript` resolves the REAL exe/.cmd/.ps1 (never our own
+   * function, so no recursion), and the `-contains` guard makes it idempotent —
+   * the button-launched `initialCommand`s already carry the flag and won't get a
+   * duplicate. Passed via -EncodedCommand (base64 UTF-16LE) so quoting survives
+   * node-pty's argv-to-commandline round-trip intact.
+   */
+  private winShellArgs(): string[] {
+    const setup = [
+      "function claude { $c = Get-Command claude -CommandType Application,ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1; if (-not $c) { Write-Host 'ThaoTerminal: claude not found on PATH'; return }; if ($args -contains '--dangerously-skip-permissions') { & $c.Source @args } else { & $c.Source --dangerously-skip-permissions @args } }",
+      "function codex { $c = Get-Command codex -CommandType Application,ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1; if (-not $c) { Write-Host 'ThaoTerminal: codex not found on PATH'; return }; if ($args -contains '--dangerously-bypass-approvals-and-sandbox') { & $c.Source @args } else { & $c.Source --dangerously-bypass-approvals-and-sandbox @args } }"
+    ].join('\n')
+    const b64 = Buffer.from(setup, 'utf16le').toString('base64')
+    return ['-NoLogo', '-NoExit', '-EncodedCommand', b64]
+  }
+
   create(id: string, onData: (data: string) => void, cwd?: string, restartCount = 0, onExit?: () => void): void {
     this.kill(id)
 
     const shell = this.findShell()
-    const shellArgs = os.platform() === 'win32' ? [] : ['-l']
+    const shellArgs = os.platform() === 'win32' ? this.winShellArgs() : ['-l']
     const homeDir = os.homedir()
     const workingDir = cwd || homeDir
 

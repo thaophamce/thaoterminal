@@ -1,13 +1,8 @@
-/**
- * Update guide. Instead of self-updating, we show the user a one-line install
- * command to copy, paste into any terminal, and run. The installer downloads
- * the latest release into /Applications; the user then quits ThaoTerminal and
- * reopens it to pick up the new version.
- */
 import { useState, useEffect } from 'react'
 
 const REPO = 'thaophamce/thaoterminal'
-const INSTALL_CMD = `curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash`
+const MAC_INSTALL_CMD = `curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash`
+const WIN_INSTALL_CMD = `irm https://raw.githubusercontent.com/${REPO}/main/install.ps1 | iex`
 
 interface Props {
   latest: string | null
@@ -16,6 +11,11 @@ interface Props {
 
 export function UpdateModal({ latest, onClose }: Props) {
   const [copied, setCopied] = useState(false)
+  const isWin = window.app.platform === 'win32'
+
+  const winDownloadUrl = latest
+    ? `https://github.com/${REPO}/releases/download/v${latest}/ThaoTerminal-Setup-${latest}.exe`
+    : `https://github.com/${REPO}/releases`
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -23,11 +23,19 @@ export function UpdateModal({ latest, onClose }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const copy = () => {
-    navigator.clipboard.writeText(INSTALL_CMD).then(() => {
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
     }).catch(() => {})
+  }
+
+  const openReleases = () => {
+    window.app.openExternal(`https://github.com/${REPO}/releases`)
+  }
+
+  const downloadWinRelease = () => {
+    window.app.openExternal(winDownloadUrl)
   }
 
   return (
@@ -39,30 +47,75 @@ export function UpdateModal({ latest, onClose }: Props) {
         </div>
 
         <div className="upd-body">
-          <ol className="upd-steps">
-            <li>
-              <b>Copy</b> the command below.
-            </li>
-            <li>
-              Open any <b>terminal</b>, <b>paste</b> it, and press <b>Enter</b>.
-              It downloads the latest version into <code>/Applications</code>.
-            </li>
-            <li>
-              When it finishes, <b>quit ThaoTerminal</b> (Alt+F4) and <b>open it again</b> —
-              you'll be on the new version.
-            </li>
-          </ol>
+          {isWin ? (
+            <>
+              <ol className="upd-steps">
+                <li>
+                  <b>Copy</b> the PowerShell command below.
+                </li>
+                <li>
+                  Open <b>PowerShell</b>, <b>paste</b> it, and press <b>Enter</b>.
+                  It downloads and launches the latest installer.
+                </li>
+                <li>
+                  When it launches, <b>quit ThaoTerminal</b> (Alt+F4) and complete the installer setup.
+                </li>
+              </ol>
 
-          <div className="upd-cmd">
-            <code>{INSTALL_CMD}</code>
-            <button className={`upd-copy ${copied ? 'done' : ''}`} onClick={copy}>
-              {copied ? '✓ Copied' : 'Copy'}
-            </button>
-          </div>
+              <div className="upd-cmd" style={{ marginBottom: '16px' }}>
+                <code style={{ fontSize: '11.5px' }}>{WIN_INSTALL_CMD}</code>
+                <button className={`upd-copy ${copied ? 'done' : ''}`} onClick={() => copy(WIN_INSTALL_CMD)}>
+                  {copied ? '✓ Copied' : 'Copy'}
+                </button>
+              </div>
+
+              <div className="upd-win-actions" style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  className="upd-copy"
+                  onClick={downloadWinRelease}
+                  style={{ flex: 1, textAlign: 'center', background: 'var(--accent)', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: 'var(--r-md)', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  Download Installer (.exe)
+                </button>
+                <button
+                  className="kb-reset"
+                  onClick={openReleases}
+                  style={{ flex: 1, padding: '10px 16px', border: '1px solid var(--border2)', borderRadius: 'var(--r-md)' }}
+                >
+                  Open Releases Page
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <ol className="upd-steps">
+                <li>
+                  <b>Copy</b> the command below.
+                </li>
+                <li>
+                  Open any <b>terminal</b>, <b>paste</b> it, and press <b>Enter</b>.
+                  It downloads the latest version into <code>/Applications</code>.
+                </li>
+                <li>
+                  <b>Quit ThaoTerminal</b> (Alt+F4) and <b>open it again</b> —
+                  you'll be on the new version.
+                </li>
+              </ol>
+
+              <div className="upd-cmd">
+                <code>{MAC_INSTALL_CMD}</code>
+                <button className={`upd-copy ${copied ? 'done' : ''}`} onClick={() => copy(MAC_INSTALL_CMD)}>
+                  {copied ? '✓ Copied' : 'Copy'}
+                </button>
+              </div>
+            </>
+          )}
 
           <p className="upd-tip">
-            Tip: you can run it right here in a ThaoTerminal tab — just quit and reopen
-            after it's done.
+            {isWin
+              ? "Tip: Make sure to quit the running ThaoTerminal before the installer finishes writing new files."
+              : "Tip: you can run it right here in a ThaoTerminal tab — just quit and reopen after it's done."
+            }
           </p>
         </div>
 
@@ -74,3 +127,5 @@ export function UpdateModal({ latest, onClose }: Props) {
     </div>
   )
 }
+
+

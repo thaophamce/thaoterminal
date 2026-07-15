@@ -75,21 +75,29 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
   const isActiveRef = useRef(isActive)
   isActiveRef.current = isActive
 
+  // Whether a remote (phone) client is currently attached to the shared PTY.
+  // Forcing an unchanged size down to ConPTY makes Ink TUIs (Claude Code/Codex)
+  // redraw their whole screen, and overlapping redraws corrupt the display
+  // (vỡ/lặp chữ) and snap scrollback to the bottom. That forced re-assert is
+  // ONLY needed to reclaim size after a phone squeezed the shared PTY, so we
+  // gate it behind an actually-connected client — desktop-only use never forces.
+  const hasRemoteClientsRef = useRef(false)
+
   // Re-fit to THIS window and push the size back to the (shared) PTY. A remote
   // phone client fits the same PTY to its tiny screen; without re-asserting,
   // the desktop stays squeezed at the phone's width — the program reflows to
   // ~40 cols and everything crams into the left half. Only the active terminal
   // is laid out (others are display:none → a fit would compute 0), so guard it.
-  // Forced: the PTY's actual size may have been changed by the OTHER client
-  // (the phone) without our local cols/rows changing, so the dedupe in
-  // pushResize would otherwise skip re-asserting it.
-  const reassertSize = useCallback(() => {
+  // `force` re-sends even an unchanged size (needed only when a phone may have
+  // changed the shared PTY behind our back); otherwise pushResize dedupes and
+  // stays silent when cols/rows didn't actually change.
+  const reassertSize = useCallback((force = false) => {
     if (!isActiveRef.current) return
     requestAnimationFrame(() => {
       if (!isActiveRef.current || !fitAddonRef.current || !terminalRef.current) return
       fitAddonRef.current.fit()
       const { cols, rows } = terminalRef.current
-      pushResize(cols, rows, true)
+      pushResize(cols, rows, force)
     })
   }, [pushResize])
 
@@ -329,9 +337,10 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
       requestAnimationFrame(() => {
         fitAddonRef.current!.fit()
         const { cols, rows } = terminalRef.current!
-        // Forced: while this tab was hidden a remote phone client may have
-        // resized the shared PTY without our local cols/rows changing.
-        pushResize(cols, rows, true)
+        // Force only if a phone is attached — it may have resized the shared
+        // PTY while this tab was hidden. Otherwise dedupe (avoid a spurious
+        // ConPTY redraw that corrupts Claude/Codex output on every tab switch).
+        pushResize(cols, rows, hasRemoteClientsRef.current)
         terminalRef.current!.focus()
       })
     }
@@ -340,10 +349,20 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
   // Re-assert our size when the desktop window regains focus or a remote phone
   // client attaches/detaches (it shrinks the shared PTY to its screen size).
   useEffect(() => {
-    window.addEventListener('focus', reassertSize)
-    const offClients = window.remote?.onClients?.(reassertSize)
+    // Window focus: only force when a phone is connected (it may have resized
+    // the shared PTY while we were away). Plain refocus with no phone must not
+    // force — a redundant ConPTY resize redraws and corrupts Claude/Codex.
+    const onFocus = () => reassertSize(hasRemoteClientsRef.current)
+    // Client attach/detach is the one case that always needs a forced re-fit:
+    // the phone either just squeezed the PTY or just released it.
+    const onClients = (count: number) => {
+      hasRemoteClientsRef.current = count > 0
+      reassertSize(true)
+    }
+    window.addEventListener('focus', onFocus)
+    const offClients = window.remote?.onClients?.(onClients)
     return () => {
-      window.removeEventListener('focus', reassertSize)
+      window.removeEventListener('focus', onFocus)
       offClients?.()
     }
   }, [reassertSize])
@@ -500,7 +519,7 @@ export function TerminalInstance({ id, isActive, cwd, name, kind, workspacePath,
         ref={containerRef}
         className="terminal-instance"
         style={{ height: '100%' }}
-        onClick={() => { terminalRef.current?.focus(); reassertSize() }}
+        onClick={() => { terminalRef.current?.focus() }}
         onDrop={handleDrop}
         onDragOver={(e) => e.preventDefault()}
       />
